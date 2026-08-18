@@ -1,0 +1,253 @@
+# Project TODO
+
+- [x] Establish the polished engineering intelligence platform shell and responsive authenticated dashboard.
+- [x] Add dashboard home with project overview, active task summary, and recent activity feed.
+- [x] Add authenticated project inspection module for project upload/linking and technology detection.
+- [x] Add persistent project storage with detected languages, frameworks, dependencies, and inspection metadata.
+- [x] Add autonomous engineering task workflow with create, assign, and track actions.
+- [x] Preserve exact task pipeline labels: Pending, In Progress, Done.
+- [x] Add task detail view with proposed code changes and readable diffs.
+- [x] Add Apply and Reject actions for proposed code changes with audit history.
+- [x] Add rule-based security audit panel and findings persistence.
+- [x] Preserve exact severity labels: Critical, High, Medium, Low.
+- [x] Add PowerShell/shell automation script storage, execution controls, and live output log.
+- [x] Add testing and verification module with suite execution records, pass/fail results, and coverage summary.
+- [x] Add structured engineering report generation for inspection, audit, and test results.
+- [x] Support report download in Markdown and PDF formats without fabricating results.
+- [x] Add LLM-powered assistant chat for project status, task descriptions, and engineering questions.
+- [x] Enforce authentication on all protected procedures and project/task data access.
+- [x] Add backend database schema, query helpers, and typed tRPC procedures for all persistent features.
+- [x] Add vitest coverage for protected procedures, exact status/severity labels, and core workflows.
+- [x] Run typecheck, tests, build, and visual UI verification; document anything NOT VERIFIED.
+- [x] Prepare final engineering report with TASK, ANALYSIS, CHANGES, SECURITY, TESTS, VERIFICATION, NOT VERIFIED, and NEXT STEPS sections.
+- [x] Implement real project ingestion for uploaded files or linked repository metadata and inspect available content where authorized.
+- [x] Add task assignment/reassignment UI and protected backend mutation.
+- [x] Create a task detail view that embeds proposed diffs and workflow history.
+- [x] Add a per-code-change audit trail/history model and UI.
+- [x] Document the authorized runner boundary for script and test execution instead of implying hosted execution.
+- [x] Expand Vitest coverage for core protected workflows.
+- [x] Produce and attach a final engineering report artifact with the required sectioned format.
+- [x] Implement linked-repository metadata retrieval and content inspection through an authorized repository integration.
+- [x] Add a concrete authorized runner contract with registration, authentication, execution lifecycle, logs, callbacks, and result ingestion.
+- [x] Add successful protected-workflow tests for project inspection, task assignment/detail, change review history, runner registration/callback, audit generation, and report generation.
+- [x] Add an authenticated GitHub content-inspection procedure using a caller-supplied token without persisting or logging the token.
+- [x] Link each execution request to the exact script run and add precise callback result-ingestion tests.
+- [x] Fix Assistant chat layout so the message list scrolls independently and the composer remains visible at the bottom with new messages in view.
+- [x] Add prompt-driven engineering request mode for project analysis, code generation proposals, and PowerShell/Shell command generation.
+- [x] Add structured code-generation proposal records with file plans, diffs, commands, and explicit Apply/Reject approval.
+- [x] Add safe self-change boundary: the platform may propose changes to itself but must require explicit approval and an authorized runner for execution.
+- [x] Explain the platform's current working, session behavior, capabilities, and NOT VERIFIED boundaries in the product UI/report.
+- [x] Add explicit generated file diffs to build proposals and render them in the Assistant review panel.
+- [x] Add a visible product explanation of authentication/session behavior, capabilities, and NOT VERIFIED boundaries.
+- [x] Rebuild Assistant route as a dedicated full-height chat workspace matching the reference screenshot.
+- [x] Keep only the conversation history scrollable and anchor the composer to the bottom of the available viewport.
+- [x] Remove page-level overflow caused by the builder/sidebar composition on the Assistant route while preserving builder access elsewhere.
+- [x] Verify desktop and mobile Assistant behavior with typecheck, tests, and screenshots.
+- [x] Verify the Assistant route at a mobile viewport and confirm the composer remains visible while only message history scrolls. Trusted 390x844 visual review confirms the full composer is visible and the chat panel contains the history viewport.
+- [x] Fix Assistant textarea/composer visibility inside the managed preview viewport so it is always visible without page scrolling.
+- [x] Verify that only the conversation history scrolls and the composer remains fixed at the visible bottom on desktop and mobile preview sizes.
+- [x] Convert Assistant into a full-screen command-center workspace rather than a short card.
+- [x] Ensure long assistant responses remain readable inside an independently scrolling conversation viewport while the composer stays visible.
+- [x] Add a persistent pending-approval queue for operations that require user input or an authorized runner.
+- [x] Expand prompt-to-code proposals with clearer project operations, file actions, verification plans, and downloadable artifacts.
+- [x] Add defensive folder protection design/proposal support without implementing unauthorized bypass or cracking capabilities.
+- [x] Document that continuous background work cannot be guaranteed after the active session ends and expose pending work clearly.
+- [x] Add a real persistent pending-approvals view with each proposal or runner-required action, status, timestamp, and next required actor.
+- [x] Extend build proposals with explicit project operations, file actions, and verification steps, and render them beside diffs and commands.
+- [x] Document session/background-work limits and pending-work behavior directly in the UI and engineering report.
+- [x] Add a complete approvals panel that covers all pending proposals and runner-required execution requests with updated timestamps and next actor.
+- [x] Add an explicit file-actions model for Create, Update, and Delete operations and render it beside diffs.
+- [x] Add clear Assistant UI copy stating that background work is session/runner-bound and can stop after the active session ends.
+- [x] Add updatedAt to build proposals and render updated timestamps in the approvals panel.
+- [x] Filter the approvals panel to clearly show pending proposals and active/requested runner actions.
+- [x] Fix Assistant preview cropping so the route header/content starts at the visible top of the managed viewport.
+- [x] Implement an exact three-part Assistant layout: visible header, independently scrolling chat history, and always-visible bottom textarea/composer.
+- [x] Verify the corrected layout at desktop and mobile preview sizes with no outer page scroll hiding the composer. Trusted desktop 1280×720 and mobile 390×844 verification confirm the header and composer are visible.
+- [x] Fix controlled-input warnings by keeping project/source selectors and textareas on stable defined values for the full component lifetime.
+- [x] Prevent binary ZIP/archive bytes from being inserted into the text sourceContent database field.
+- [x] Add safe archive-upload handling with clear supported-format validation and user-facing mutation errors.
+- [x] Add regression tests for stable input contracts and binary-upload rejection or metadata-only handling.
+- [x] Add protected backend validation in project create/inspect procedures to reject archive or binary sourceContent before database insertion.
+- [x] Trace and fix the exact controlled/uncontrolled input source and add evidence-driven regression coverage for the affected inputs.
+- [x] Add API-level tests for archive rejection and supported text-file ingestion.
+- [x] Surface backend mutation rejection messages in the Projects UI instead of relying only on client-side validation.
+- [x] Add procedure-level Vitest coverage proving projects.create rejects ZIP/GZIP/binary sourceContent with BAD_REQUEST.
+- [x] Add a protected projects.create success-path test proving readable text sourceContent is accepted and persisted.
+- [x] Add focused source-mode input-lifetime regression coverage or a deterministic component test for the link-to-file toggle.
+- [x] Add a protected projects.create test for GZIP-signature sourceContent with typed BAD_REQUEST rejection.
+- [x] Add focused source-mode component or deterministic DOM regression coverage for link-to-file input remounting and stable values.
+- [x] Reproduce the source-mode toggle in preview and confirm no new controlled/uncontrolled warning appears. Latest authenticated preview shows the corrected keyed inputs and no fresh warning after the fix; direct external browser toggle remains unavailable because it requires the authenticated managed session.
+- [x] Restore ZIP/archive upload as a safe metadata/storage reference without inserting binary bytes into sourceContent.
+- [x] Add authenticated project deletion with explicit confirmation and ownership checks.
+- [x] Add regression tests for archive upload metadata handling and project deletion authorization.
+- [x] Verify Projects UI shows ZIP upload and delete controls without reintroducing the controlled-input warning. Latest authenticated Projects screenshot shows Upload reference and Delete controls; no fresh warning was emitted after the fix.
+- [x] Remove the two explanatory lines below the Assistant page heading and expand the chat workspace into that space.
+- [x] Add a clear Builder purpose/help panel explaining proposal generation, review, approval, and execution boundaries.
+- [x] Add Builder Reset/Clear controls that remove the current prompt and proposal state.
+- [x] Add Builder execution/error feedback so command failures can be reported and reviewed instead of leaving the user uncertain.
+- [x] Add Automation Run controls with visible Pending, In Progress, Done/error states and live output/error feedback.
+- [x] Add concise in-product usage guidance explaining Assistant, Build from a prompt, and Automation responsibilities.
+- [x] Add explicit Automation lifecycle UI mapping backend Requested/Running/Passed/Failed/Not Verified into user-facing Pending/In Progress/Done/Error states.
+- [x] Add concise Assistant role guidance explaining how Assistant differs from Builder and Automation after the heading copy was reduced.
+- [x] Reproduce Projects source-mode toggle inside an authenticated managed preview session and capture fresh console evidence with no controlled/uncontrolled warning.
+- [x] Pair authenticated Projects controls verification with fresh post-interaction console evidence before treating the warning-related check as fully verified.
+- [x] Create an authenticated end-to-end test matrix covering every navigation module, primary action, success state, failure state, and usage instructions.
+- [x] Test and fix Overview, Projects, ZIP upload/link mode, project deletion, and re-inspection flows in the authenticated session.
+- [x] Test and fix Tasks, Code changes, Security audit, Testing, and Reports workflows in the authenticated session.
+- [x] Test and fix Assistant chat, Builder proposal/reset/error/approval flows, and Automation Run/status/output/error flows.
+- [x] Run responsive, console, typecheck, Vitest, and regression verification; record any remaining NOT VERIFIED items.
+- [x] Produce a feature-by-feature authenticated engineering test report and practical usage guide.
+- [x] Fix Automation mobile layout overflow so the new-script card and controls fit within narrow authenticated viewports without horizontal clipping.
+- [x] Test project deletion and re-inspection end-to-end in the authenticated Projects session and record results. Re-inspect executed successfully; Delete confirmation guard was inspected in code and destructive confirmation was intentionally not submitted.
+- [x] Create or surface a real proposed code change, then verify authenticated Apply/Reject behavior and history in Code changes. Builder proposal Approve/Reject controls were exercised; the separate Code changes queue remained empty because Builder proposals require an authorized runner to create file-change history.
+- [x] Exercise Builder Approve/Reject and failed-command feedback submission end-to-end, then document observed states. Fresh proposal review controls, execution-feedback field, Reject, and Approve were exercised; no commands were executed without a runner.
+- [x] Write and deliver a final authenticated QA report/usage guide artifact summarizing each module, how to use it, status, and explicit NOT VERIFIED items.
+- [x] Fix Builder Approve/Reject mutation refresh so a successful review decision clears stale Proposed state and updates pending-approval counts.
+- [x] Assess authorized-runner execution in a disposable workspace and document NOT VERIFIED: no authorized runner was registered, so real script/test callbacks could not be executed.
+- [x] Use a disposable project fixture to verify destructive deletion confirmation and Code changes Apply/Reject/history without risking user projects. Disposable deletion was completed and the separate disposable Code changes record was rejected and displayed with Rejected status/history.
+- [x] Audit current Builder proposal/review data and Automation run/log UI for the next improvement cycle.
+- [x] Add visible Builder review-history timeline with proposal status, actor, timestamp, and decision context.
+- [x] Add Automation log filtering, export, and clearer authorized-runner setup guidance.
+- [x] Re-run authenticated responsive regression, TypeScript, Vitest, and save a new checkpoint for the improvement cycle.
+- [x] Enrich Builder review-history entries with authenticated decision actor/source and meaningful proposal decision context.
+- [x] Save the improvement-cycle checkpoint only after the enriched review-history verification is complete.
+- [x] Add Builder execution-mode choice: Authorized runner or Self-run PowerShell/Shell commands.
+- [x] Add a visible 15-second decision countdown and disclose that inactivity may select the configured default runner mode, never execute silently.
+- [x] Add safe read-only folder discovery when the user does not know the path, with OS-aware commands and a path-confirmation step.
+- [x] Add self-run command copy/export with verification and rollback instructions, while preserving explicit approval boundaries.
+- [x] Add tests, authenticated responsive verification, and usage documentation for the new execution-mode workflow.
+- [x] Add explicit Windows and Unix path-discovery presets plus a concrete discovered-path confirmation state.
+- [x] Exercise self-run proposal generation and render a visible verification/rollback checklist in the Builder result.
+- [x] Add focused automated tests for execution-mode instruction shaping, countdown fallback, and OS-aware discovery commands.
+- [x] Extract the 15-second execution-mode fallback transition into a testable helper and add automated coverage proving it selects Runner.
+- [x] Fix the self-run proposal flow so script filenames are not presented as executable until their actual contents or a reliable local file-creation command is shown. Fresh authenticated proposal now renders Complete file contents and states files are not on the laptop until saved.
+- [x] Add complete script-content/file-creation guidance for discovery, protection, and rollback, with placeholder paths blocked or clearly marked. Backend validation rejects placeholder paths and missing matching .ps1 contents for self-run proposals.
+- [x] Verify the submitted PowerShell file-not-found error produces a corrected actionable proposal and run focused regression tests. Fresh proposal generated after the fix; 19 Vitest tests pass.
+- [x] Simplify Builder into a single primary prompt-to-build composer with only AutoRunner or Self-run choices.
+- [x] Hide or collapse advanced proposal/review complexity from the primary workflow while preserving safety status and errors.
+- [x] Make AutoRunner execute the approved build request on the connected local runner and show progress/results. The UI now packages generated files into a runner script and sends it through the existing runner contract; actual execution remains Not Verified without a connected runner.
+- [x] Make Self-run return complete files and copyable commands with direct save/run instructions.
+- [x] Add simple success/error feedback, authenticated usability tests, responsive verification, and checkpoint the simplified workflow.
+- [x] Add an explicit Send to AutoRunner confirmation step so generated builds are not dispatched accidentally.
+- [x] Verify simplified AutoRunner dispatch with an active authorized runner, or document the runner-dependent state as Not Verified. No active runner is connected; the UI reports the runner-dependent state instead of claiming execution.
+- [x] Capture authenticated desktop and mobile screenshots for the simplified Builder and save a checkpoint only after regression verification. Desktop 1280x720 and mobile 390x844 are verified.
+- [x] Fix Windows self-run proposals so PowerShell users never receive Linux-only chmod/ls commands. Backend guardrails now reject Linux syntax for Windows targets.
+- [x] Prevent pasted PowerShell prompt/output from being interpreted as a request to create relative hp/coding paths without confirmation. Fresh prompt with explicit Windows intent generated a profile-resolved PowerShell proposal.
+- [x] Add OS-aware folder creation, ACL protection, and verification commands with clear PowerShell vs Shell labels. Windows fresh proposal used New-Item, Test-Path, Get-Item and no chmod/ls -ld.
+- [x] Add focused regression tests and authenticated Windows self-run verification for the reported error flow. 20 Vitest tests pass and fresh authenticated Windows proposal was verified.
+- [x] Add automatic parsing of pasted PowerShell discovery output into selectable valid folder paths.
+- [x] Add read-only Windows ACL preview with current permissions and proposed protection comparison before any change.
+- [x] Add focused parser/ACL tests, authenticated responsive verification, and save a checkpoint. 20 Vitest tests pass; authenticated parser smoke test shows selectable path and ACL preview; desktop/mobile screenshots verified.
+- [x] Make folder-protection prompts discover candidate folders automatically without requiring the user to know an exact path.
+- [x] Add candidate folder preview/selection with wrong-target prevention before any protection action.
+- [x] Infer a suitable protection method from the simple user goal and explain it in plain Roman Urdu instead of exposing ACL/EFS/archive terminology first.
+- [x] Add safe verification, error feedback, focused tests, authenticated responsive verification, and checkpoint the intent-driven workflow.
+- [x] Reframe Builder copy and primary prompt workflow around creating arbitrary websites, applications, tools, and codebases from natural-language requests.
+- [x] Make generated proposals clearly include project structure, complete files, implementation commands, verification steps, and next build actions for general software requests.
+- [x] Move folder protection to an example/specialized capability rather than the Builder’s main purpose, while preserving safety and approval boundaries.
+- [x] Add focused tests and authenticated responsive verification for the general prompt-to-software workflow, then save a checkpoint.
+- [x] Adopt “SynapseX PowerShell Engineering Studio” as the product name and make the single-screen command center the primary interface.
+- [x] Replace dashboard/sidebar-first Builder presentation with terminal activity, workspace files, editor/diff review, approval state, and fixed multiline prompt input.
+- [x] Support multilingual semantic prompts for new websites, applications, scripts, APIs, automations, security tooling, and authorized existing-codebase changes.
+- [x] Add practical workspace lifecycle features from the brief: file tree/editor, diffs, snapshots, rollback, imports/exports, tests, verification logs, safe static preview, and GitHub-ready documentation/CI.
+- [x] Preserve explicit approval for destructive/production/permission/credential/infrastructure changes and refuse bypass, theft, exploitation, cracking, or unauthorized access.
+- [x] Validate SynapseX with mandatory tests, TypeScript, production build, responsive checks, and a clear Roman Urdu usage guide.
+- [x] Reproduce and diagnose invalid structured proposals for long multilingual software prompts. The provided long multilingual ListKit prompt reproduced the failure pattern at the structured-output boundary.
+- [x] Add response normalization, validation, safe retry, and schema-compatible fallback handling in the Builder backend.
+- [x] Improve Builder error feedback for malformed AI responses without exposing sensitive raw content.
+- [x] Add regression coverage and verify TypeScript, Vitest, responsive UI, and checkpoint the fix. Live LLM generation for the exact long prompt remains NOT VERIFIED.
+- [x] Merge Build from prompt into the Assistant so the user has one PS-style screen for questions, clarification, software generation, progress, artifacts, and approvals.
+- [x] Route software-building prompts from Assistant into actionable implementation proposals rather than explanation-only responses.
+- [x] Show generated files, diffs, preview/test status, approval state, and runner/self-run actions inside the same Assistant screen.
+- [x] Add quality-oriented project prompting and proposal self-review gate so generated websites/apps receive stronger structure and quality checks; a deeper iterative regenerate control remains a next-step enhancement.
+- [x] Add regression tests, authenticated responsive verification, and checkpoint the unified Assistant workflow.
+- [x] Treat idea-style product briefs such as the real-estate marketing kit description as build requests when the user intends creation, even without the exact word “build”.
+- [x] Add a compact planning/fallback path so large product briefs can produce a valid MVP proposal with complete core files and explicit later phases.
+- [x] Add regression coverage for structured proposal parsing and improve the Builder’s failure guidance for the submitted real-estate prompt shape.
+- [x] Run tests/typecheck and checkpoint the product-brief fix. Exact live LLM generation through the Assistant remains NOT VERIFIED.
+- [x] Change Assistant build flow from proposal-only completion to execution-ready project generation with files, workspace package, verification, and same-screen lifecycle.
+- [x] Dispatch approved generated projects through the authorized runner and show Requested, Running, Passed, Failed, and Not Verified states in Assistant. Actual runner callback execution remains NOT VERIFIED without a connected runner.
+- [x] Preserve explicit approval for destructive/production changes while removing unnecessary manual proposal repetition from the user flow.
+- [x] Add execution-oriented regression validation, preview/feedback messaging, and checkpoint the new flow. 25 Vitest tests and TypeScript pass.
+- [x] Make Self-run PowerShell the default Assistant build mode instead of requiring runner selection first.
+- [x] Show complete `.ps1` file contents, exact save/run/verification/rollback guidance, and error-feedback instructions in the same Assistant screen.
+- [x] Keep AutoRunner optional and preserve approval/safety boundaries for generated commands.
+- [x] Add self-run regression validation, responsive verification, and checkpoint the PowerShell-first flow. 25 Vitest tests and TypeScript pass; live laptop execution remains NOT VERIFIED.
+- [x] Replace the single-response failure path for large software prompts with staged executable-core generation.
+- [x] Persist or expose remaining modules/tasks so the user can continue generation from the same Assistant screen through the preserved brief and staged plan.
+- [x] Add a visible Continue next stage action with Self-run file and PowerShell command output.
+- [x] Add regression tests and checkpoint staged generation. 26 Vitest tests and TypeScript pass; exact live LLM generation remains NOT VERIFIED.
+- [x] Make long Assistant responses scroll within the available viewport without being hidden behind the fixed composer.
+- [x] Add visible vertical and horizontal scrolling for long PowerShell/code blocks while preserving copy controls and readable wrapping.
+- [x] Verify desktop and mobile responsive layouts and add regression coverage before checkpointing. Empty-state desktop/mobile screenshots and 26 Vitest tests pass; populated long-script rendering remains NOT VERIFIED in an authenticated session.
+- [x] Persist Assistant conversations and messages per authenticated user so previous prompts, responses, and build context reload after refresh or a new session.
+- [x] Add explicit New chat and Restore history controls without deleting saved work accidentally.
+- [x] Link saved Assistant context to the single Assistant build/feedback screen, with user-scoped history and non-destructive new-chat behavior.
+- [x] Add router/UI regression coverage, authenticated history verification, responsive screenshot verification, and checkpoint the recovery fix. Existing assistantMessages schema required no new migration.
+- [x] Make the whole Assistant conversation/response area scroll vertically so earlier text and code headers remain reachable.
+- [x] Keep Streamdown code copy controls available and wrap code to the available width, using horizontal scrolling only when needed.
+- [x] Prevent the Build overlay and composer from covering response content on desktop and mobile, then verify with restored long output. 26 Vitest tests and TypeScript pass.
+- [x] Keep full Assistant history visible while bounding each AI message and total model context below server validation limits.
+- [x] Prevent Builder prompts above 12000 characters by raising the validated transport ceiling to 30000 and compacting model context; staged continuation remains available for large work.
+- [x] Add regression tests for oversized message/prompt boundaries; visible history remains intact while AI transport is compacted.
+- [x] Verify the reported boundary path through helper coverage, run 28 Vitest tests/typecheck, and checkpoint the fix. Exact authenticated mutation replay remains NOT VERIFIED.
+- [x] Prevent long pasted PowerShell transcripts and malformed generated code from crashing or hiding the Assistant screen.
+- [x] Add resilient Markdown/code rendering and a safe plain-text fallback for malformed terminal output, while preserving copy and scroll controls.
+- [x] Keep pasted execution feedback bounded for AI transport without removing the full visible transcript from saved history.
+- [x] Add regression coverage, reproduce the pasted transcript shape through restored history, verify Assistant recovery visually, and checkpoint the fix. 28 Vitest tests and TypeScript pass; exact fresh mutation replay remains NOT VERIFIED.
+- [x] Isolate every restored Assistant message so one malformed or oversized response cannot blank the entire page.
+- [x] Chunk initial history restoration to the recent 8 messages and provide a safe plain-text fallback for messages that cannot render.
+- [x] Reproduce the repeated disappearance shape through restored transcript content, add regression coverage, verify recovery visually, and checkpoint the fix. 28 Vitest tests and TypeScript pass; exact fresh mutation replay remains NOT VERIFIED.
+- [x] Capture diagnostic evidence for the disappearance path: current logs had no fresh exception, while independent analysis identified nested boundaries/duplicate keys, oversized Streamdown work, and smooth-scroll blocking as likely causes. Fresh exact browser exception remains NOT VERIFIED.
+- [x] Fix the likely root render/state failure by removing nested message boundaries and duplicate keys, using plain-text rendering for huge messages, isolating Markdown, and preserving composer/history.
+- [x] Add regression coverage, verify mobile recovery with restored long transcript content, run 28 Vitest tests and TypeScript, and checkpoint. Fresh user-triggered mutation replay remains NOT VERIFIED.
+- [x] Add an Assistant-specific crash-safe boundary around the full screen, not just individual Markdown messages.
+- [x] Preserve composer, New chat, Restore history, and a visible retry/reload fallback when any chat subtree fails.
+- [x] Guard render/history failure paths, verify the recovery shell on mobile with restored transcript content, run 28 Vitest tests and TypeScript, and checkpoint. Fresh user-triggered disappearance replay remains NOT VERIFIED.
+- [x] Make generated backend guidance specify the exact PORT source, start command, localhost URL, and health-check command.
+- [x] Prevent Assistant from saying a generated server is live unless a verified runner/health check reports it; otherwise show NOT VERIFIED with the exact expected URL.
+- [x] Add port/health-check fallback regression coverage, run 28 Vitest tests and TypeScript, and checkpoint. Fresh user-triggered disappearance replay remains NOT VERIFIED.
+- [x] Replace self-run inline `node -e`/PowerShell source injection with complete file artifacts plus per-file Copy/Download controls; authorized runner packaging remains separate.
+- [x] Ensure self-run source delivery preserves special characters by rejecting unsafe inline injection commands and directing users to complete downloaded file artifacts.
+- [x] Treat pasted terminal errors as bounded feedback events and keep Assistant visible with the route-level recovery shell and per-message fallback.
+- [x] Add regression coverage for the attached PropMarketingAgent corruption pattern, run 28 Vitest tests and TypeScript, and checkpoint. Exact fresh user mutation replay remains NOT VERIFIED.
+- [x] Reproduce the reported failure evidence: user-provided Console output captured `Canceled` from `editor.main.js` and a `/manus/logs` 502; no SynapseX source exception was present.
+- [x] Trace ownership of the reported transition: direct preview renders the Assistant with restored content; the supplied failure lines belong to external preview/editor infrastructure, not SynapseX source.
+- [x] Add a permanent static HTML runtime recovery panel with reload action plus app-level cancellation/error handling; desktop/mobile direct-preview visibility verified. Exact external-wrapper reproduction remains NOT VERIFIED.
+- [x] Trace and handle `Canceled` promises from Assistant requests without unhandled rejection or screen loss in the app bootstrap and Assistant mutation feedback.
+- [x] Confirm preview `/manus/logs` 502 is external infrastructure and not an Assistant content error; project code contains no endpoint integration to change.
+- [x] Add cancellation/error recovery coverage through app bootstrap and visible fallback behavior, reproduce the supplied evidence path, verify direct preview recovery, and checkpoint. External wrapper behavior remains outside project ownership.
+- [x] Audit whether Meta Pixel/telemetry is initialized more than once; no Meta Pixel or Pixel ID is present in SynapseX source, so the duplicate is external.
+- [x] Isolate external editor.main.js cancellation warnings from Assistant app state; app-level recovery controls remain independent of the external wrapper.
+- [x] Verify the direct preview remains visible with the restored Assistant content and recovery controls; external editor-console regression remains outside project ownership.
+- [x] Separate external `1gki67t5lxyuw.js` Meta Pixel and `editor.main.js` cancellation messages from any actual SynapseX runtime exception.
+- [x] Do not modify project code for external wrapper warnings unless controlled evidence shows they cause the app blank screen.
+- [x] Verify the Assistant remains visible in the direct app preview and report the proven ownership boundary.
+- [x] Investigate repeat Assistant disappearance even after a short prompt; direct preview remains visible and the static recovery path is preserved. Exact external-wrapper transition remains NOT VERIFIED.
+- [x] Add a safe collapsible Terminal Output viewer and frame pasted logs as diagnostic feedback rather than executable instructions.
+- [x] Replace generated inline `node -e` source injection with a complete downloadable file artifact workflow and a short safe artifact-verification command.
+- [x] Add regression tests for the exact `PropMarketingAgent` corruption pattern and terminal transcript handling; 32 Vitest tests and TypeScript pass. Fresh external-wrapper short-prompt replay remains NOT VERIFIED.
+- [x] Investigate the newly reproduced blank Assistant screen after external `/manus/logs` 502, including app-owned logs and recovery state. App logs show clean startup after restart; no current app exception or `/manus/logs` route exists.
+- [x] Make recovery visibility persistent and expose a clear reload/recovery state when preview infrastructure fails. The static recovery panel remains app-owned; it cannot control an external wrapper that hides the iframe.
+- [x] Validate direct preview after the change and document the external-wrapper limitation without claiming the 502 itself is fixed. Direct `/assistant` rendered successfully after restart; wrapper 502 remains NOT VERIFIED as fixed.
+- [x] Stop repeated `/manus/logs`/editor-wrapper failures from appearing as a silent Assistant disappearance; expose an app-owned reconnect/reload state and preserve the last usable chat view. Canceled and known external wrapper signals now show recovery messaging instead of being silently swallowed.
+- [x] Add a regression test for repeated canceled/502 wrapper signals so app recovery remains visible and user prompts are not lost. Runtime recovery classification tests pass.
+- [x] Validate the direct app after the new recovery boundary and provide one clear user action instead of asking for repeated error pastes. Direct Assistant preview remains visible; Reload Assistant is the user action.
+- [x] Record the latest repeated blanking event and keep the direct Assistant URL as the documented fallback path. Direct `/assistant` rendered the Command Center, chat, Terminal Output viewer, composer, and Build panel.
+- [x] Validate direct Assistant availability after the management preview disappears; do not claim the external wrapper is fixed. Direct app is reachable; management preview blanking remains an external wrapper issue.
+- [x] Confirm and investigate disappearance from the direct Assistant browser tab, not only the Management Preview. Direct tab initially showed a loading skeleton, then rendered normally after the controlled prompt.
+- [x] Capture fresh browser/server evidence for a controlled short prompt in the direct tab and trace the app-owned failure path. Short prompt completed; direct app remained visible and generated a response.
+- [x] Fix Assistant disappearing during loading, cancellation, timeout, server restart, or render failure; preserve the command center and last visible chat state. Removed fixed-height/overflow clipping, added visible reconnect loading state, and retained recovery messaging.
+- [x] Add lifecycle regression coverage for prompt submit, canceled request, timeout, and recovery without a blank screen. Runtime recovery tests pass; total suite is 35 tests.
+- [x] Reproduce a controlled short prompt after the fix in the direct Assistant tab and checkpoint only after validation. `Write a PowerShell hello-world script.` returned a visible response and the composer remained mounted.
+- [x] Fix Assistant composer so the user textarea stays fixed at the viewport bottom while conversation content scrolls independently. Composer is viewport-fixed with reserved chat padding.
+- [x] Validate desktop and mobile composer visibility, chat scrolling, and existing tests before checkpoint. Desktop/mobile screenshots pass; 35 Vitest tests and TypeScript pass.
+- [x] Move Assistant conversation scrolling into an internal scroll region; keep its scrollbar aligned with the fixed composer instead of scrolling the outer page. Outer page is fixed; conversation uses the internal ScrollArea.
+- [x] Auto-anchor the internal region to the newest user/assistant message while retaining upward scroll access to older messages. Existing auto-scroll runs on message/loading changes, and older messages remain accessible via the visible internal scrollbar.
+- [x] Validate desktop/mobile internal scrollbar and latest-message behavior before checkpoint. Desktop/mobile screenshots show the internal scrollbar and fixed composer; 35 tests and TypeScript pass.
+- [ ] Reunify Assistant into one continuous PowerShell/Visual Studio-style panel with chat, scrollbar, and composer inside the same surface.
+- [ ] Remove the visually separated black strip, compact oversized controls, and increase chat workspace height/width.
+- [ ] Validate the unified layout at desktop and mobile sizes and preserve all existing behavior before checkpoint.
+- [ ] Create a clean downloadable ZIP from the current SynapseX checkpoint, excluding node_modules, dist, local logs, uploads, and secrets.
+- [ ] Validate the ZIP contents and provide it to the user.
+- [ ] Provide exact PowerShell extraction, Git initialization, remote, commit, and push commands for the confirmed GitHub repository.
