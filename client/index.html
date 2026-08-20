@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>Universal Engineering Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <div id="runtime-recovery" hidden role="alert" style="position:fixed;inset:16px;z-index:9999;display:none;place-items:center;padding:24px;background:#07111f;color:#e2e8f0;font-family:DM Sans,system-ui,sans-serif">
+      <div style="width:min(640px,100%);border:1px solid rgba(103,232,249,.35);border-radius:18px;background:#0f1b2d;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.45)">
+        <p style="margin:0 0 8px;color:#67e8f9;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">SynapseX recovery</p>
+        <h1 style="margin:0 0 10px;font-size:24px">Assistant screen safe mode</h1>
+        <p id="runtime-recovery-message" style="margin:0 0 18px;color:#cbd5e1;line-height:1.6">A temporary preview or rendering request failed. Your saved chat and project data were not deleted.</p>
+        <button id="runtime-recovery-reload" type="button" style="cursor:pointer;border:1px solid rgba(103,232,249,.5);border-radius:10px;background:#0891b2;color:white;padding:10px 14px;font-weight:700">Reload Assistant</button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script
+      defer
+      src="%VITE_ANALYTICS_ENDPOINT%/umami"
+      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+  </body>
+
+</html>

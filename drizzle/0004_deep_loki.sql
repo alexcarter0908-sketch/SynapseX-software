@@ -1,0 +1,1 @@
+ALTER TABLE `executionRequests` ADD `scriptRunId` int;

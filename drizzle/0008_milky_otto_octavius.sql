@@ -1,0 +1,1 @@
+ALTER TABLE `buildProposals` ADD `fileActions` text NOT NULL;
