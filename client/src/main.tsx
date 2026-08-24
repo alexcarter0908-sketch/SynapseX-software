@@ -6,6 +6,8 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { startLogin } from "./const";
+import { getAnalyticsConfig, mountAnalytics } from "./lib/analytics";
+import { isLocalDemo } from "./lib/localDemo";
 import "./index.css";
 import { isCanceledReason, isExternalPreviewSource, recoveryMessage } from "./lib/runtimeRecovery";
 
@@ -14,6 +16,8 @@ const queryClient = new QueryClient();
 const isCanceledError = isCanceledReason;
 
 if (typeof window !== "undefined") {
+  const analytics = isLocalDemo() ? undefined : getAnalyticsConfig(import.meta.env.VITE_ANALYTICS_ENDPOINT, import.meta.env.VITE_ANALYTICS_WEBSITE_ID);
+  if (analytics) mountAnalytics(analytics);
   const showRuntimeRecovery = (reason: unknown, external = false) => {
     const panel = document.getElementById("runtime-recovery");
     const message = document.getElementById("runtime-recovery-message");
@@ -44,6 +48,7 @@ if (typeof window !== "undefined") {
 }
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
+  if (isLocalDemo()) return;
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 

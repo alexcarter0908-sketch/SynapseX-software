@@ -68,10 +68,10 @@ describe("builder execution helpers", () => {
     expect(buildExecutionInstructions("runner", false, "", "Windows")).toContain("approval-gated");
   });
 
-  it("defaults undecided mode to Runner when the countdown reaches zero", async () => {
+  it("defaults undecided mode to self-run when the countdown reaches zero", async () => {
     const { nextExecutionMode } = await import("./builderExecution");
     expect(nextExecutionMode(2, "undecided")).toEqual({ mode: "undecided", seconds: 1 });
-    expect(nextExecutionMode(1, "undecided")).toEqual({ mode: "runner", seconds: 15 });
+    expect(nextExecutionMode(1, "undecided")).toEqual({ mode: "self", seconds: 15 });
     expect(nextExecutionMode(1, "self")).toEqual({ mode: "self", seconds: 1 });
   });
 });

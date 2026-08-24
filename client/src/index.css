@@ -259,3 +259,24 @@
     line-height: 1.35rem;
   }
 }
+
+/* Unified Assistant: keep self-run controls inside the command surface at every width. */
+.max-h-\[70vh\] {
+  overflow-x: hidden;
+}
+
+@media (max-width: 1023px) {
+  .max-h-\[70vh\] .md\:grid-cols-\[1fr_220px\] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .max-h-\[70vh\] .md\:grid-cols-\[1fr_220px\] {
+    grid-template-columns: minmax(0, 1fr) minmax(290px, 0.55fr);
+  }
+
+  .max-h-\[70vh\] .md\:grid-cols-\[1fr_220px\] > * {
+    min-width: 0;
+  }
+}

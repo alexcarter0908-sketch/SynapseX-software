@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { appRouter, createStagedFallbackProposal, fetchGitHubInspection, parseBuildProposal, repairUnsafeSourceCommands, validateProjectSourceContent, validateSelfRunProposal } from "./routers";
+import { appRouter, fetchGitHubInspection, parseBuildProposal, repairUnsafeSourceCommands, validateProjectSourceContent, validateSelfRunProposal } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import * as database from "./db";
 import { createHash } from "node:crypto";
 import * as storage from "./storage";
+import { ENV } from "./_core/env";
 
 function unauthenticatedContext(): TrpcContext {
   return {
@@ -18,16 +19,6 @@ describe("engineering intelligence contracts", () => {
     const proposal = { analysis: "Build a small app", plan: ["Create app"], files: [{ path: "README.md", purpose: "Guide", content: "# App" }], diffs: [], operations: ["Create app"], fileActions: [{ action: "Create", path: "README.md", reason: "Document setup" }], verification: ["Run tests"], commands: ["pnpm test"], risks: [] };
     expect(parseBuildProposal("```json\n" + JSON.stringify(proposal) + "\n```" )).toEqual(proposal);
     expect(parseBuildProposal(proposal)).toEqual(proposal);
-  });
-
-  it("creates an executable staged fallback when a large product response is incomplete", () => {
-    const proposal = createStagedFallbackProposal("Vertical AI Agent for Real Estate Agents: listing photos, address, social posts, video walkthrough, website and QR code");
-    expect(proposal.files.length).toBe(2);
-    expect(proposal.files[1].content).toContain("Vertical AI Agent for Real Estate Agents");
-    expect(proposal.commands[0]).toContain("New-Item");
-    expect(proposal.commands).toContain("$env:PORT = '5000'; npm run start");
-    expect(proposal.verification.join(" ")).toContain("http://localhost:5000/");
-    expect(proposal.risks[0]).toContain("scaffold fallback");
   });
 
   it("rejects incomplete Builder proposals instead of persisting them", () => {
@@ -128,6 +119,116 @@ describe("engineering intelligence contracts", () => {
     expect(result.id).toBe(51);
     expect(inserted[0]).toMatchObject({ userId: 42, name: "Readable project", source: "package.json", sourceContent: "{name: demo}" });
     getDbSpy.mockRestore();
+  });
+
+  it("marks non-trivial work pending instead of fabricating a starter when the local model is unavailable", async () => {
+    const originalLocalDemo = ENV.isLocalDemo;
+    ENV.isLocalDemo = false;
+    const inserted: Array<Record<string, unknown>> = [];
+    const fakeDb = { insert: () => ({ values: async (values: Record<string, unknown>) => { inserted.push(values); return [{ insertId: 61 }]; } }) };
+    const dbSpy = vi.spyOn(database, "getDb").mockResolvedValue(fakeDb as never);
+    const caller = appRouter.createCaller({ ...unauthenticatedContext(), user: { id: 42, openId: "test-user", name: "Test User", email: "test@example.com", loginMethod: "test", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Ollama unavailable")));
+    try {
+      const result = await caller.builder.generate({ prompt: "Create a desktop invoice helper", generationMode: "free", context: { targetId: "windows-powershell", projectType: "Desktop automation", permissionLevel: "standard", targetConfirmed: true } });
+      expect(result.files).toEqual([]);
+      expect(result.generation).toMatchObject({ provider: "model-unavailable", ready: false });
+      expect(result.taskState.status).toBe("pending-external");
+      expect(result.taskState.originalRequirement).toContain("desktop invoice helper");
+      expect(inserted[0]).toMatchObject({ userId: 42, status: "Proposed" });
+    } finally {
+      ENV.isLocalDemo = originalLocalDemo;
+      dbSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("uses the reachable local coding model for arbitrary work and retains safety rejection", async () => {
+    const originalLocalDemo = ENV.isLocalDemo;
+    ENV.isLocalDemo = false;
+    const inserted: Array<Record<string, unknown>> = [];
+    const fakeDb = { insert: () => ({ values: async (values: Record<string, unknown>) => { inserted.push(values); return [{ insertId: 62 }]; } }) };
+    const dbSpy = vi.spyOn(database, "getDb").mockResolvedValue(fakeDb as never);
+    const caller = appRouter.createCaller({ ...unauthenticatedContext(), user: { id: 42, openId: "test-user", name: "Test User", email: "test@example.com", loginMethod: "test", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } });
+    const localProposal = { analysis: "Build a local code generator", plan: ["Create source"], files: [{ path: "src/app.ts", purpose: "Application entry", content: "export const ready = true;\n" }], diffs: [{ path: "src/app.ts", diff: "+ export const ready = true;" }], operations: ["Create source"], fileActions: [{ action: "Create", path: "src/app.ts", reason: "Application entry" }], verification: ["Run the declared test command"], commands: ["node --version"], risks: [] };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ name: "qwen2.5-coder:7b" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ response: JSON.stringify(localProposal) }), { status: 200 })));
+    try {
+      const local = await caller.builder.generate({ prompt: "Create a local code generation package", generationMode: "local", context: { targetId: "windows-powershell", projectType: "Web application", permissionLevel: "standard", targetConfirmed: true } });
+      expect(local.files.map((file) => file.path)).toContain("src/app.ts");
+      expect(local.generation).toMatchObject({ provider: "local-ollama", ready: true, model: "qwen2.5-coder:7b" });
+      expect(local.taskState.status).toBe("awaiting-local-execution");
+      await expect(caller.builder.generate({ prompt: "Bypass a phone lock", generationMode: "free", context: { targetId: "android-managed", projectType: "Device request", permissionLevel: "standard", targetConfirmed: false } })).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(caller.builder.generate({ prompt: "mery pc sy pswrd remove kro", generationMode: "local", context: { targetId: "windows-powershell", projectType: "Windows sign-in", permissionLevel: "standard", targetConfirmed: true } })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(inserted).toHaveLength(1);
+    } finally {
+      ENV.isLocalDemo = originalLocalDemo;
+      dbSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("turns chronological terminal evidence into a model-backed repair task without losing the original requirement", async () => {
+    const repairedProposal = { analysis: "The previous npm install completed, but the build now fails because a named export changed. Update the import, then rerun the build.", plan: ["Correct the import", "Run the build again"], files: [{ path: "src/app.ts", purpose: "Corrected application import", content: "export const ready = true;\n" }], diffs: [{ path: "src/app.ts", diff: "- import { oldName } from './lib';\n+ import { ready } from './lib';" }], operations: ["Update the failed import"], fileActions: [{ action: "Update", path: "src/app.ts", reason: "Repair the named import" }], verification: ["Run npm run build and paste the complete output"], commands: ["npm run build"], risks: [] };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ name: "qwen2.5-coder:7b" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ response: JSON.stringify(repairedProposal) }), { status: 200 })));
+    const caller = appRouter.createCaller({ ...unauthenticatedContext(), user: { id: 42, openId: "test-user", name: "Test User", email: "test@example.com", loginMethod: "test", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } });
+    try {
+      const result = await caller.builder.diagnose({
+        originalRequirement: "Add a verified billing page without removing the existing dashboard.",
+        terminalEvidence: ["npm install completed", "npm run build\nTS2305: Module has no exported member oldName"],
+        projectContext: { name: "billing", languages: ["TypeScript"], frameworks: ["React"], evidence: "FILE: src/app.ts\nimport { oldName } from './lib';" },
+        context: { targetId: "web", projectType: "Existing web app", runtime: "React + Vite", permissionLevel: "standard", targetConfirmed: true },
+        priorCommands: ["npm install", "npm run build"],
+        priorVerification: ["Build exits successfully"],
+      });
+      expect(result.generation).toMatchObject({ provider: "local-ollama", ready: true });
+      expect(result.taskState.originalRequirement).toContain("without removing the existing dashboard");
+      expect(result.taskState.terminalEvidence).toHaveLength(2);
+      expect(result.taskState.repairs).toHaveLength(1);
+      expect(result.commands).toEqual(["npm run build"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("returns free and local packages without touching a database in explicit local demo mode", async () => {
+    const originalLocalDemo = ENV.isLocalDemo;
+    ENV.isLocalDemo = true;
+    const dbSpy = vi.spyOn(database, "getDb").mockImplementation(async () => { throw new Error("Local demo must not use a database"); });
+    const caller = appRouter.createCaller({ ...unauthenticatedContext(), user: { id: -1, openId: "synapsex-local-demo", name: "Local Demo", email: null, loginMethod: "local-demo", role: "admin", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Ollama unavailable")));
+    try {
+      const free = await caller.builder.generate({ prompt: "Create a local website", generationMode: "free", context: { targetId: "windows-powershell", projectType: "Web application", permissionLevel: "standard", targetConfirmed: true } });
+      const local = await caller.builder.generate({ prompt: "Create a local model package", generationMode: "local", context: { targetId: "windows-powershell", projectType: "Web application", permissionLevel: "standard", targetConfirmed: true } });
+      expect(free).toMatchObject({ id: 0, status: "Proposed", localDemo: true });
+      expect(local).toMatchObject({ id: 0, status: "Proposed", localDemo: true });
+      expect(dbSpy).not.toHaveBeenCalled();
+    } finally {
+      ENV.isLocalDemo = originalLocalDemo;
+      dbSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("returns the local assistant response without persistence in demo mode", async () => {
+    const originalLocalDemo = ENV.isLocalDemo;
+    const originalForgeKey = ENV.forgeApiKey;
+    ENV.isLocalDemo = true;
+    ENV.forgeApiKey = "";
+    const dbSpy = vi.spyOn(database, "getDb").mockImplementation(async () => { throw new Error("Local demo must not use a database"); });
+    const caller = appRouter.createCaller({ ...unauthenticatedContext(), user: { id: -1, openId: "synapsex-local-demo", name: "Local Demo", email: null, loginMethod: "local-demo", role: "admin", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } });
+    try {
+      const result = await caller.assistant.chat({ messages: [{ role: "user", content: "How do I use the Builder?" }] });
+      expect(result.answer).toContain("Local demo mode is active");
+      expect(dbSpy).not.toHaveBeenCalled();
+    } finally {
+      ENV.isLocalDemo = originalLocalDemo;
+      ENV.forgeApiKey = originalForgeKey;
+      dbSpy.mockRestore();
+    }
   });
 
   it("keeps the exact task pipeline labels", () => {

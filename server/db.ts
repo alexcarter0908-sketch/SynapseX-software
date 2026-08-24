@@ -88,6 +88,7 @@ export async function getProjectForUser(userId: number, projectId: number) {
 }
 
 export async function addActivity(userId: number, message: string, kind: string, projectId?: number) {
+  if (process.env.VITEST) return;
   const db = await getDb();
   if (!db) return;
   await db.insert(activity).values({ userId, projectId, message, kind });

@@ -3,11 +3,14 @@ import { createHash, randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
+import { ENV } from "./_core/env";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { storagePut } from "./storage";
+import { buildUniversalGenerationContract, createFreeFirstArtifactPlan, evaluateGenerationEligibility, getExecutionTier, type UniversalGenerationContext } from "../shared/universalContract";
+import { appendTerminalEvidence, createEngineeringTaskState, recordTaskRepair, type EngineeringProjectContext, type EngineeringTaskState } from "../shared/engineeringTask";
 import {
   addActivity,
   assistantMessages,
@@ -203,6 +206,8 @@ type BuildProposal = {
   verification: string[];
   commands: string[];
   risks: string[];
+  taskState?: EngineeringTaskState;
+  generation?: { provider: "local-ollama" | "direct-native" | "hosted-model" | "model-unavailable"; model?: string; ready: boolean };
 };
 
 export function parseBuildProposal(content: unknown): BuildProposal {
@@ -218,6 +223,102 @@ export function parseBuildProposal(content: unknown): BuildProposal {
   return normalizeBuildProposal(parsed);
 }
 
+async function requestLocalOllamaProposal(prompt: string, contract: string, projectContext?: EngineeringProjectContext): Promise<BuildProposal> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  const baseUrl = (process.env.SYNAPSEX_OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+  const model = process.env.SYNAPSEX_OLLAMA_MODEL || "qwen2.5-coder:7b";
+  const inspectedProject = projectContext
+    ? `\n\nINSPECTED PROJECT CONTEXT:\n${JSON.stringify(projectContext)}\nTreat this as the existing project. Preserve working behavior, modify only files justified by the request, and explain any information that is unavailable.`
+    : "\n\nNo existing project was supplied. Create a new project that directly satisfies the brief.";
+  const instruction = `You are SynapseX Local Engineering Assistant. Return ONLY one valid JSON object with these required keys: analysis, plan, files, diffs, operations, fileActions, verification, commands, risks. Each file requires path, purpose, and complete content. Each diff requires path and diff. Each fileAction requires action (Create, Update, or Delete), path, and reason. Build the requested product, not a generic starter. Choose an appropriate architecture from the brief. Include only commands that match the chosen runtime. Never claim execution. Do not fabricate testimonials, customer reviews, performance numbers, users, revenue, or security validation. Do not produce destructive, bypass, credential theft, rooting, jailbreak, or unauthorized-access instructions.\n\n${contract}${inspectedProject}\n\nUSER BRIEF:\n${prompt}`;
+  try {
+    const response = await fetch(`${baseUrl}/api/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model, prompt: instruction, stream: false, format: "json", options: { temperature: 0.2 } }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
+    const body = await response.json() as { response?: string };
+    if (!body.response) throw new Error("Ollama returned no proposal text");
+    return parseBuildProposal(body.response);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function inspectLocalOllama() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  const baseUrl = (process.env.SYNAPSEX_OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+  const model = process.env.SYNAPSEX_OLLAMA_MODEL || "qwen2.5-coder:7b";
+  try {
+    const response = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal });
+    if (!response.ok) return { ready: false, reachable: false, baseUrl, model, reason: `Ollama returned HTTP ${response.status}.` };
+    const body = await response.json() as { models?: Array<{ name?: string }> };
+    const installed = body.models?.some((item) => item.name === model || item.name?.startsWith(`${model}:`)) ?? false;
+    return installed
+      ? { ready: true, reachable: true, baseUrl, model, reason: "The configured local coding model is ready." }
+      : { ready: false, reachable: true, baseUrl, model, reason: `Ollama is running, but ${model} is not installed.` };
+  } catch {
+    return { ready: false, reachable: false, baseUrl, model, reason: "Ollama is not reachable on this computer." };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function createModelUnavailableProposal(prompt: string, status: { reachable: boolean; model: string; reason: string }): BuildProposal {
+  return {
+    analysis: `No implementation was fabricated. The requested engineering work is pending because ${status.reason} SynapseX needs the local coding model to understand and generate arbitrary software work.`,
+    plan: ["Make the free local coding model available", "Re-submit the original brief without changing it", "Review the generated implementation, run commands locally, and return the complete terminal evidence"],
+    files: [],
+    diffs: [],
+    operations: ["Record the original requirement as pending local-model generation"],
+    fileActions: [],
+    verification: ["Run ollama --version and confirm it prints a version.", `Run ollama list and confirm ${status.model} appears.`, "Submit the same original prompt again; only then will SynapseX generate implementation files and project commands."],
+    commands: status.reachable ? [`ollama pull ${status.model}`, "ollama list"] : ["winget install --id Ollama.Ollama -e", `ollama pull ${status.model}`, "ollama list"],
+    risks: ["PENDING: A local model is required for arbitrary software implementation.", "No source files, commands, tests, deployment, or external integration were claimed as completed."],
+    generation: { provider: "model-unavailable", model: status.model, ready: false },
+  };
+}
+
+function projectContextFromRecord(project: { name: string; source: string; languages?: string | null; frameworks?: string | null; dependencies?: string | null; sourceContent?: string | null } | undefined): EngineeringProjectContext | undefined {
+  if (!project) return undefined;
+  const asList = (value?: string | null) => {
+    try { return value ? JSON.parse(value) as string[] : []; } catch { return value ? [value] : []; }
+  };
+  return {
+    name: project.name,
+    source: project.source,
+    languages: asList(project.languages),
+    frameworks: asList(project.frameworks),
+    dependencies: asList(project.dependencies),
+    evidence: project.sourceContent?.slice(0, 24_000),
+  };
+}
+
+function withUniversalTaskState(proposal: BuildProposal, prompt: string, context: UniversalGenerationContext, projectContext: EngineeringProjectContext | undefined, generation: NonNullable<BuildProposal["generation"]>) {
+  const externalPrerequisites = generation.provider === "model-unavailable" ? ["Free local coding model availability"] : [];
+  return {
+    ...proposal,
+    generation,
+    taskState: createEngineeringTaskState({
+      taskId: `task-${randomBytes(8).toString("hex")}`,
+      originalRequirement: prompt,
+      analysis: proposal.analysis,
+      target: context.targetId,
+      runtime: context.runtime,
+      projectContext,
+      plan: proposal.plan,
+      files: proposal.files,
+      commands: proposal.commands,
+      verification: proposal.verification,
+      externalPrerequisites,
+    }),
+  };
+}
+
 function normalizeBuildProposal(value: Record<string, unknown>): BuildProposal {
   const arrays = ["plan", "files", "diffs", "operations", "fileActions", "verification", "commands", "risks"];
   if (typeof value.analysis !== "string" || arrays.some((key) => !Array.isArray(value[key]))) throw new Error("Proposal schema is incomplete");
@@ -228,32 +329,6 @@ function normalizeBuildProposal(value: Record<string, unknown>): BuildProposal {
   if (diffs.some((item) => typeof item.path !== "string" || typeof item.diff !== "string")) throw new Error("Proposal diff entries are incomplete");
   if (actions.some((item) => !["Create", "Update", "Delete"].includes(String(item.action)) || typeof item.path !== "string" || typeof item.reason !== "string")) throw new Error("Proposal action entries are incomplete");
   return value as unknown as BuildProposal;
-}
-
-export function createStagedFallbackProposal(prompt: string): BuildProposal {
-  const brief = prompt.replace(/\s+/g, " ").trim().slice(0, 1200);
-  const readme = `# SynapseX staged build\n\n## Request\n${brief}\n\n## Stage 1\nThis scaffold records the requested product and creates a safe starting workspace. The next stage should implement the first user-visible vertical slice, then add integrations and production hardening one module at a time.\n\n## Local server contract\nIf the next stage creates a Node server, use the environment variable PORT with a safe local default of 5000. Start it with the project’s declared start command, then verify with Invoke-WebRequest http://localhost:5000/ -UseBasicParsing. The expected URL is http://localhost:5000/; it is NOT VERIFIED until that health check succeeds.\n\n## Safety\nNo local files or commands are claimed as executed. Review the generated files and run the listed verification commands yourself.\n`;
-  const briefFile = `# Product brief\n\n${brief}\n\n## Next implementation stages\n1. Define the smallest user journey and data model.\n2. Implement the first working screen and persistence boundary.\n3. Add integrations, authentication, tests, and deployment configuration after the core flow is verified.\n`;
-  return {
-    analysis: "The request was understood, but the model response was incomplete. A staged scaffold was created so implementation can continue without losing the product brief.",
-    plan: ["Create the safe workspace scaffold", "Implement the first executable vertical slice in the next stage", "Add integrations and production hardening after the core flow is verified"],
-    files: [
-      { path: "README.md", purpose: "Staged build entry point and execution boundary", content: readme },
-      { path: "docs/PRODUCT-BRIEF.md", purpose: "Preserve the complete user brief for the next generation stage", content: briefFile },
-    ],
-    diffs: [
-      { path: "README.md", diff: "+ Added a staged build entry point with the requested brief and next implementation stages." },
-      { path: "docs/PRODUCT-BRIEF.md", diff: "+ Preserved the product brief so the next stage can continue from the same context." },
-    ],
-    operations: ["Create a staged workspace scaffold", "Queue the next implementation stage from the preserved product brief"],
-    fileActions: [
-      { action: "Create", path: "README.md", reason: "Document the staged build and safe execution boundary" },
-      { action: "Create", path: "docs/PRODUCT-BRIEF.md", reason: "Preserve the request for continuation" },
-    ],
-    verification: ["Confirm both files are saved in the target workspace", "Review the preserved brief before continuing to the first vertical slice", "If a Node server is added, expected local URL is http://localhost:5000/; run Invoke-WebRequest http://localhost:5000/ -UseBasicParsing and mark it NOT VERIFIED until it succeeds"],
-    commands: ["New-Item -ItemType Directory -Force -Path .\\docs | Out-Null", "Get-ChildItem -Recurse", "$env:PORT = '5000'; npm run start", "Invoke-WebRequest http://localhost:5000/ -UseBasicParsing"],
-    risks: ["This is a scaffold fallback, not the complete product implementation", "The next stage must be reviewed before adding external integrations or production changes"],
-  };
 }
 
 export const appRouter = router({
@@ -487,14 +562,57 @@ export const appRouter = router({
     }),
   }),
   builder: router({
+    localModelStatus: publicProcedure.query(() => inspectLocalOllama()),
     list: protectedProcedure.input(z.object({ projectId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
       return db.select().from(buildProposals).where(input?.projectId ? and(eq(buildProposals.userId, ctx.user.id), eq(buildProposals.projectId, input.projectId)) : eq(buildProposals.userId, ctx.user.id)).orderBy(desc(buildProposals.createdAt));
     }),
-    generate: protectedProcedure.input(z.object({ prompt: z.string().min(8).max(30000), projectId: z.number().int().positive().optional() })).mutation(async ({ ctx, input }) => {
+    generate: protectedProcedure.input(z.object({ prompt: z.string().min(8).max(30000), projectId: z.number().int().positive().optional(), projectContext: z.object({ name: z.string().max(260).optional(), source: z.string().max(500).optional(), languages: z.array(z.string().max(100)).max(30).optional(), frameworks: z.array(z.string().max(100)).max(30).optional(), dependencies: z.array(z.string().max(120)).max(100).optional(), evidence: z.string().max(60000).optional() }).optional(), generationMode: z.enum(["free", "local", "model"]).default("free"), context: z.object({ targetId: z.enum(["windows-powershell", "linux-bash", "macos-zsh", "python", "node", "web", "api", "android-managed"]), projectType: z.string().min(2).max(120), runtime: z.string().max(120).optional(), permissionLevel: z.enum(["standard", "administrator", "owner-confirmed"]), targetConfirmed: z.boolean() }).optional() })).mutation(async ({ ctx, input }) => {
       const project = input.projectId ? await requireProject(ctx.user.id, input.projectId) : undefined;
-      const promptForModel = input.prompt.length <= 18000 ? input.prompt : `${input.prompt.slice(0, 12000)}\n\n[Middle of brief compacted for model context]\n\n${input.prompt.slice(-5000)}`;
+      const selectedProjectContext = input.projectContext ?? projectContextFromRecord(project);
+      const context: UniversalGenerationContext = input.context ?? { targetId: "windows-powershell", projectType: "General software", permissionLevel: "standard", targetConfirmed: false };
+      const contract = buildUniversalGenerationContract(context);
+      const eligibility = evaluateGenerationEligibility(input.generationMode, input.prompt, context);
+      if (!eligibility.allowed) throw new TRPCError({ code: eligibility.risk === "blocked" ? "FORBIDDEN" : "BAD_REQUEST", message: eligibility.reason });
+      if (input.generationMode !== "model") {
+        const tier = getExecutionTier(input.prompt, context);
+        let proposal: BuildProposal;
+        let generation: NonNullable<BuildProposal["generation"]>;
+        if (tier === "direct-native") {
+          const direct = createFreeFirstArtifactPlan(input.prompt, context);
+          proposal = {
+            ...direct,
+            diffs: [],
+            operations: ["Perform the requested reviewed native action", "Return only visual or terminal evidence from this exact action"],
+            fileActions: [],
+          };
+          generation = { provider: "direct-native", ready: true };
+        } else {
+          const localModel = await inspectLocalOllama();
+          if (!localModel.ready) {
+            proposal = createModelUnavailableProposal(input.prompt, localModel);
+            generation = { provider: "model-unavailable", model: localModel.model, ready: false };
+          } else {
+            try {
+              proposal = await requestLocalOllamaProposal(input.prompt, contract, selectedProjectContext);
+              proposal = repairUnsafeSourceCommands(proposal, context.targetId === "linux-bash" || context.targetId === "macos-zsh" ? "Unix" : "Windows");
+              generation = { provider: "local-ollama", model: localModel.model, ready: true };
+            } catch {
+              proposal = createModelUnavailableProposal(input.prompt, { reachable: true, model: localModel.model, reason: "the local model returned an invalid or incomplete engineering proposal." });
+              generation = { provider: "model-unavailable", model: localModel.model, ready: false };
+            }
+          }
+        }
+        proposal = withUniversalTaskState(proposal, input.prompt, context, selectedProjectContext, generation);
+        if (ENV.isLocalDemo) return { id: 0, status: "Proposed", ...proposal, localDemo: true };
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
+        const result = await db.insert(buildProposals).values({ userId: ctx.user.id, projectId: input.projectId, prompt: input.prompt, analysis: proposal.analysis, plan: JSON.stringify(proposal.plan), files: JSON.stringify(proposal.files), diffs: JSON.stringify(proposal.diffs), operations: JSON.stringify(proposal.operations), fileActions: JSON.stringify(proposal.fileActions), verification: JSON.stringify(proposal.verification), commands: JSON.stringify(proposal.commands), risks: JSON.stringify(proposal.risks), status: "Proposed" });
+        await addActivity(ctx.user.id, generation.provider === "local-ollama" ? "Generated a model-backed engineering proposal with local Ollama" : generation.provider === "direct-native" ? "Prepared a reviewed direct native action" : "Marked engineering work pending because the local model is unavailable", "builder", input.projectId);
+        return { id: Number(result[0].insertId), status: "Proposed", ...proposal };
+      }
+      const promptForModel = `${contract}\n\n${input.prompt.length <= 18000 ? input.prompt : `${input.prompt.slice(0, 12000)}\n\n[Middle of brief compacted for model context]\n\n${input.prompt.slice(-5000)}`}`;
       const response = await invokeLLM({
         messages: [{ role: "system", content: "You are Universal Engineering Agent Builder, a general-purpose prompt-to-software engineer. Convert any natural-language request into a concrete, production-minded engineering proposal for websites, web apps, mobile apps, desktop tools, APIs, automations, scripts, data systems, or other lawful software. Infer sensible technology choices when the user does not specify them and explain those choices plainly. The proposal must be implementable, not merely conceptual. For websites and apps, prioritize a polished responsive user experience, coherent visual system, accessible interactions, meaningful empty/loading/error states, realistic content structure without fabricated testimonials or reviews, and production-ready project setup. Before returning JSON, self-review the plan for missing files, broken imports, incomplete flows, weak visual quality, and missing verification; correct those gaps. Return only JSON matching the schema. Generate complete file contents whenever a file is proposed. For self-run requests, never provide commands that assume a proposed script already exists: include the full script content and an exact safe save/create command or clearly label the file as not yet created. For source files containing TypeScript, JavaScript, JSON, template literals, backslashes, dollar signs, quotes, or emojis, never use node -e, fs.writeFileSync with inline source, or a giant PowerShell here-string as the primary delivery method; deliver the complete file as a separate copyable/downloadable artifact and use a safe file-save workflow. Commands must be copy/paste-ready, must not use placeholder paths as if they were real, and must include verification and rollback steps. Never claim files were written, commands were executed, tests passed, or self-modification occurred; this is a proposal until explicitly approved and sent to an authorized runner. For defensive folder protection requests, propose least-privilege ACLs, encryption-at-rest, password or OS credential integration, backup/recovery steps, and verification commands; never claim local access or that protection was applied. Refuse destructive, credential-exfiltrating, unauthorized bypass, or password-cracking actions. For any generated server, state the exact PORT source (environment variable with a safe local default), the start command, the expected localhost URL including the numeric port, and a concrete health-check command such as Invoke-WebRequest or curl. Distinguish clearly between local server expected, runner execution requested, health check passed, and production deployment; never say a server is live, running, deployed, or verified unless an authorized execution result or health check recorded that fact. " + (project ? `Project context: ${project.name}; source: ${project.source}; detected languages: ${project.languages ?? "unknown"}; frameworks: ${project.frameworks ?? "unknown"}.` : "No project context was selected.") }, { role: "user", content: promptForModel }],
         response_format: { type: "json_schema", json_schema: { name: "engineering_build_proposal", strict: true, schema: { type: "object", properties: { analysis: { type: "string" }, plan: { type: "array", items: { type: "string" } }, files: { type: "array", items: { type: "object", properties: { path: { type: "string" }, purpose: { type: "string" }, content: { type: "string" } }, required: ["path", "purpose", "content"], additionalProperties: false } }, diffs: { type: "array", items: { type: "object", properties: { path: { type: "string" }, diff: { type: "string" } }, required: ["path", "diff"], additionalProperties: false } }, operations: { type: "array", items: { type: "string" } }, fileActions: { type: "array", items: { type: "object", properties: { action: { type: "string", enum: ["Create", "Update", "Delete"] }, path: { type: "string" }, reason: { type: "string" } }, required: ["action", "path", "reason"], additionalProperties: false } }, verification: { type: "array", items: { type: "string" } }, commands: { type: "array", items: { type: "string" } }, risks: { type: "array", items: { type: "string" } } }, required: ["analysis", "plan", "files", "diffs", "operations", "fileActions", "verification", "commands", "risks"], additionalProperties: false } } }
@@ -523,7 +641,7 @@ export const appRouter = router({
           try {
             proposal = parseBuildProposal(mvpRetry.choices?.[0]?.message?.content);
           } catch {
-            proposal = createStagedFallbackProposal(input.prompt);
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The model response could not be validated. No incomplete scaffold was generated; retry with the local coding model or provide a narrower first implementation stage." });
           }
         }
       }
@@ -533,11 +651,43 @@ export const appRouter = router({
         const selfRunIssues = validateSelfRunProposal(proposal, targetOs);
         if (selfRunIssues.length > 0) throw new TRPCError({ code: "BAD_REQUEST", message: `Self-run proposal needs correction: ${selfRunIssues.join(" ")}` });
       }
+      proposal = withUniversalTaskState(proposal, input.prompt, context, selectedProjectContext, { provider: "hosted-model", ready: true });
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
       const result = await db.insert(buildProposals).values({ userId: ctx.user.id, projectId: input.projectId, prompt: input.prompt, analysis: proposal.analysis, plan: JSON.stringify(proposal.plan), files: JSON.stringify(proposal.files), diffs: JSON.stringify(proposal.diffs), operations: JSON.stringify(proposal.operations), fileActions: JSON.stringify(proposal.fileActions), verification: JSON.stringify(proposal.verification), commands: JSON.stringify(proposal.commands), risks: JSON.stringify(proposal.risks), status: "Proposed" });
       await addActivity(ctx.user.id, `Generated a code proposal from an engineering prompt`, "builder", input.projectId);
       return { id: Number(result[0].insertId), status: "Proposed", ...proposal };
+    }),
+    diagnose: protectedProcedure.input(z.object({ originalRequirement: z.string().min(8).max(30000), terminalEvidence: z.array(z.string().min(1).max(60000)).min(1).max(30), projectContext: z.object({ name: z.string().max(260).optional(), source: z.string().max(500).optional(), languages: z.array(z.string().max(100)).max(30).optional(), frameworks: z.array(z.string().max(100)).max(30).optional(), dependencies: z.array(z.string().max(120)).max(100).optional(), evidence: z.string().max(60000).optional() }).optional(), context: z.object({ targetId: z.enum(["windows-powershell", "linux-bash", "macos-zsh", "python", "node", "web", "api", "android-managed"]), projectType: z.string().min(2).max(120), runtime: z.string().max(120).optional(), permissionLevel: z.enum(["standard", "administrator", "owner-confirmed"]), targetConfirmed: z.boolean() }), priorCommands: z.array(z.string().max(10000)).max(80), priorVerification: z.array(z.string().max(4000)).max(80) })).mutation(async ({ input }) => {
+      const localModel = await inspectLocalOllama();
+      const diagnosticPrompt = [
+        `ORIGINAL REQUIREMENT:\n${input.originalRequirement}`,
+        `PREVIOUS COMMANDS:\n${input.priorCommands.join("\n") || "None"}`,
+        `REMAINING VERIFICATION:\n${input.priorVerification.join("\n") || "None"}`,
+        `CHRONOLOGICAL TERMINAL EVIDENCE:\n${input.terminalEvidence.map((entry, index) => `--- OUTPUT ${index + 1} ---\n${entry}`).join("\n")}`,
+        "Diagnose the actual latest state. Do not repeat a command that already succeeded. If a source/configuration repair is needed, return corrected complete files. If evidence proves only one next check is needed, return only that exact command. Preserve the original requirement; do not solve an error by removing requested functionality. Never declare verified completion without concrete evidence.",
+      ].join("\n\n");
+      let proposal: BuildProposal;
+      let generation: NonNullable<BuildProposal["generation"]>;
+      if (!localModel.ready) {
+        proposal = createModelUnavailableProposal(input.originalRequirement, localModel);
+        generation = { provider: "model-unavailable", model: localModel.model, ready: false };
+      } else {
+        try {
+          proposal = await requestLocalOllamaProposal(diagnosticPrompt, buildUniversalGenerationContract(input.context), input.projectContext);
+          proposal = repairUnsafeSourceCommands(proposal, input.context.targetId === "linux-bash" || input.context.targetId === "macos-zsh" ? "Unix" : "Windows");
+          generation = { provider: "local-ollama", model: localModel.model, ready: true };
+        } catch {
+          proposal = createModelUnavailableProposal(input.originalRequirement, { reachable: true, model: localModel.model, reason: "the local model could not return a valid diagnosis." });
+          generation = { provider: "model-unavailable", model: localModel.model, ready: false };
+        }
+      }
+      proposal = withUniversalTaskState(proposal, input.originalRequirement, input.context, input.projectContext, generation);
+      let taskState = proposal.taskState!;
+      for (const evidence of input.terminalEvidence) taskState = appendTerminalEvidence(taskState, evidence);
+      taskState = recordTaskRepair(taskState, { observedAt: Date.now(), summary: proposal.analysis, nextCommands: proposal.commands, outcome: "needs-verification" });
+      proposal.taskState = taskState;
+      return proposal;
     }),
     review: protectedProcedure.input(z.object({ proposalId: z.number().int().positive(), status: z.enum(["Applied", "Rejected"]) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -561,9 +711,10 @@ export const appRouter = router({
     }),
     chat: protectedProcedure.input(z.object({ projectId: z.number().int().positive().optional(), messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(8000) })).min(1).max(20) })).mutation(async ({ ctx, input }) => {
       const project = input.projectId ? await requireProject(ctx.user.id, input.projectId) : undefined;
-      const response = await invokeLLM({ messages: [{ role: "system", content: `You are the Universal Engineering Agent assistant. Be precise, security-conscious, and honest. Never claim an operation was executed unless the platform recorded it. If data is unavailable, say NOT VERIFIED. ${project ? `Current project: ${project.name}; source: ${project.source}; technologies: ${project.languages ?? "unknown"}, ${project.frameworks ?? "unknown"}.` : "No project is selected."}` }, ...input.messages] });
-      const answer = textContent(response.choices?.[0]?.message?.content);
-      const db = await getDb();
+      const answer = ENV.isLocalDemo && !ENV.forgeApiKey
+        ? "Local demo mode is active. Use the Builder panel to create a free starter package or a local Ollama package. No online model, runner, external OAuth, or database is required for those self-run outputs."
+        : textContent((await invokeLLM({ messages: [{ role: "system", content: `You are the Universal Engineering Agent assistant. Be precise, security-conscious, and honest. Never claim an operation was executed unless the platform recorded it. If data is unavailable, say NOT VERIFIED. ${project ? `Current project: ${project.name}; source: ${project.source}; technologies: ${project.languages ?? "unknown"}, ${project.frameworks ?? "unknown"}.` : "No project is selected."}` }, ...input.messages] })).choices?.[0]?.message?.content);
+      const db = ENV.isLocalDemo ? null : await getDb();
       if (db) {
         await db.insert(assistantMessages).values({ projectId: input.projectId, userId: ctx.user.id, role: "user", content: input.messages[input.messages.length - 1].content });
         await db.insert(assistantMessages).values({ projectId: input.projectId, userId: ctx.user.id, role: "assistant", content: answer });

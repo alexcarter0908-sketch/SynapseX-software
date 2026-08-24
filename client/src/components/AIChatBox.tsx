@@ -197,7 +197,7 @@ export function AIChatBox({
       style={{ height }}
     >
       {/* Messages Area */}
-      <div ref={scrollAreaRef} className="min-h-0 flex-1 overflow-hidden pb-24">
+      <div ref={scrollAreaRef} className="min-h-0 flex-1 overflow-hidden">
         {displayMessages.length === 0 ? (
           <div className="flex h-full flex-col p-4">
             <div className="flex flex-1 flex-col items-center justify-center gap-6 text-muted-foreground">
@@ -309,7 +309,7 @@ export function AIChatBox({
       <form
         ref={inputAreaRef}
         onSubmit={handleSubmit}
-        className="fixed inset-x-0 bottom-0 z-50 flex items-end gap-2 border-t border-slate-700 bg-[#101719]/95 p-3 shadow-[0_-10px_24px_rgba(0,0,0,0.35)] backdrop-blur supports-[backdrop-filter]:bg-[#101719]/90 md:px-8"
+        className="flex shrink-0 items-end gap-2 border-t border-slate-700 bg-[#101719]/95 p-3 shadow-[0_-10px_24px_rgba(0,0,0,0.35)] backdrop-blur supports-[backdrop-filter]:bg-[#101719]/90"
       >
         <Textarea
           ref={textareaRef}

@@ -166,7 +166,7 @@ function DashboardLayoutContent({
   }, [isResizing, setSidebarWidth]);
 
   if (commandCenter) {
-    return <SidebarInset className="flex min-h-screen min-w-0 flex-1 flex-col bg-[#101416]"><main className="flex min-h-screen min-w-0 flex-1 overflow-x-hidden overflow-y-visible p-0">{children}</main></SidebarInset>;
+    return <SidebarInset className="flex min-h-screen w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden bg-[#101416]"><main className="flex min-h-screen w-full min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-visible p-0">{children}</main></SidebarInset>;
   }
 
   return (

@@ -256,6 +256,20 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
+    if (ENV.isLocalDemo) {
+      const now = new Date();
+      return {
+        id: -1,
+        openId: "synapsex-local-demo",
+        name: "Local Demo",
+        email: null,
+        loginMethod: "local-demo",
+        role: "admin",
+        createdAt: now,
+        updatedAt: now,
+        lastSignedIn: now,
+      };
+    }
     // 1. Prefer the session cookie (regular OAuth login).
     const cookies = this.parseCookies(req.headers.cookie);
     let sessionToken = cookies.get(COOKIE_NAME);

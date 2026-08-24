@@ -54,7 +54,7 @@ export function getDiscoveryCommand(os: DiscoveryOs, folderName: string) {
 
 export function nextExecutionMode(seconds: number, currentMode: ExecutionMode) {
   if (currentMode !== "undecided") return { mode: currentMode, seconds };
-  if (seconds <= 1) return { mode: "runner" as const, seconds: 15 };
+  if (seconds <= 1) return { mode: "self" as const, seconds: 15 };
   return { mode: "undecided" as const, seconds: seconds - 1 };
 }
 
