@@ -260,8 +260,11 @@ export function chooseStarterProfile(prompt: string, context: UniversalGeneratio
   if (asksForSignIn && mentionsWakeOrBoot) return "windows-signin-protection" as const;
   if (/\b(self[- ]?improv|improve yourself|fix yourself|own code|synapsex (?:code|workspace|project)|rebuild yourself)\b/.test(request)) return "self-improvement" as const;
   if (/\b(command center|laptop (?:design|structure)|phone (?:design|structure)|mobile device design|vehicle automation|car automation|iot system|hardware system)\b/.test(request)) return "systems-design" as const;
-  if (/\b(security baseline|defensive security|usb security|device protection|hardening|endpoint security|protection layer)\b/.test(request) && /\b(implement|implementation|install|apply|enable|enforce|protection layer)\b/.test(request)) return "security-protection-layer" as const;
-  if (/\b(security baseline|defensive security|usb security|device protection|hardening|endpoint security|protection layer)\b/.test(request)) return "security-baseline" as const;
+  const defensiveProtectionSignal = /\b(security[-\s]+baseline|defensive\s+security|defensive(?:\s+\w+){0,2}?\s+protection[-\s]+layer|usb[-\s]+security|device[-\s]+protection|hardening|endpoint[-\s]+security|protection[-\s]+layer|windows[-\s]+firewall|microsoft[-\s]+defender)\b/.test(request);
+  const defensiveImplementationSignal = /\b(implement|implementation|install|apply|enable|enforce)\b/.test(request)
+    || (/\b(create|build|package)\b/.test(request) && /\b(protection[-\s]+layer|firewall|defender)\b/.test(request));
+  if (defensiveProtectionSignal && defensiveImplementationSignal) return "security-protection-layer" as const;
+  if (defensiveProtectionSignal) return "security-baseline" as const;
   if ((context.targetId === "windows-powershell" || /\b(powershell|\.ps1)\b/.test(request)) && /\b(backup|back up|archive|zip)\b/.test(request)) return "powershell-backup" as const;
   if (/\b(powershell|\.ps1|windows command)\b/.test(request)) return "powershell" as const;
   return "generic" as const;
@@ -396,6 +399,16 @@ function createStarterArtifacts(profile: ReturnType<typeof chooseStarterProfile>
   };
   if (profile === "security-protection-layer") return {
     files: [
+      { path: "scripts/Get-AuthorizedSecurityBaseline.ps1", purpose: "Read-only baseline report before any reviewed protection change", content: `$ErrorActionPreference = 'Stop'
+# This script changes no settings. Run it before reviewing -Apply.
+$report = [ordered]@{
+  ComputerName = $env:COMPUTERNAME
+  Timestamp = (Get-Date).ToString('o')
+  FirewallProfiles = if (Get-Command Get-NetFirewallProfile -ErrorAction SilentlyContinue) { Get-NetFirewallProfile | Select-Object Name, Enabled, DefaultInboundAction, DefaultOutboundAction } else { 'Firewall cmdlets unavailable' }
+  DefenderStatus = if (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue) { Get-MpComputerStatus | Select-Object AMServiceEnabled, AntivirusEnabled, RealTimeProtectionEnabled, AntivirusSignatureLastUpdated } else { 'Microsoft Defender cmdlets unavailable' }
+}
+$report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath .\\security-baseline-report.json -Encoding utf8
+Write-Host 'Read-only report saved to security-baseline-report.json'` },
       { path: "config/protection-layer.json", purpose: "Declared defensive controls for the authorized Windows device", content: `{
   "version": 1,
   "scope": "authorized-local-windows-device",
@@ -482,8 +495,8 @@ This package does not collect credentials, create remote access, bypass controls
 Request: ${requestComment}
 ` },
     ],
-    commands: ["# From the extracted generated package in an elevated PowerShell window:", "Unblock-File -LiteralPath .\\scripts\\Install-AuthorizedProtectionLayer.ps1", "& .\\scripts\\Install-AuthorizedProtectionLayer.ps1 -Apply", "& .\\scripts\\Verify-AuthorizedProtectionLayer.ps1"],
-    verification: ["Confirm a timestamped protection-layer-state-*.json record was created", "Confirm available Firewall profiles report Enabled: true", "Confirm protection-layer-verification.json was created", "If Microsoft Defender cmdlets are available, confirm RealTimeProtectionEnabled is true or review the explicit warning", "Use cleanup only to remove local reports; it never weakens security controls"],
+    commands: ["# First run the read-only baseline from the generated package:", "powershell -ExecutionPolicy Bypass -File .\\scripts\\Get-AuthorizedSecurityBaseline.ps1", "Get-Content .\\security-baseline-report.json", "# Review the report and installer. Only then choose an elevated PowerShell window and explicitly run -Apply:", "Unblock-File -LiteralPath .\\scripts\\Install-AuthorizedProtectionLayer.ps1", "& .\\scripts\\Install-AuthorizedProtectionLayer.ps1 -Apply", "& .\\scripts\\Verify-AuthorizedProtectionLayer.ps1"],
+    verification: ["Confirm security-baseline-report.json was created before any -Apply decision", "Confirm a timestamped protection-layer-state-*.json record was created only after an explicit reviewed -Apply", "Confirm available Firewall profiles report Enabled: true", "Confirm protection-layer-verification.json was created", "If Microsoft Defender cmdlets are available, confirm RealTimeProtectionEnabled is true or review the explicit warning", "Use cleanup only to remove local reports; it never weakens security controls"],
   };
   if (profile === "windows-signin-protection") return {
     files: [

@@ -129,6 +129,19 @@ describe("universal self-run contract", () => {
     expect(installer).not.toContain("-Enabled False");
   });
 
+  it("recognizes a hyphenated defensive Windows protection-layer brief without requiring a model", () => {
+    const prompt = "Create a defensive Windows protection-layer package for my own computer. First create a read-only baseline report. Then provide complete reviewable PowerShell files that require an explicit -Apply switch to enable and verify Windows Firewall and Microsoft Defender protections where available. Do not remove passwords, disable security, install software, use secrets, publish externally, or make network changes.";
+    const context = { targetId: "windows-powershell" as const, projectType: "Security", permissionLevel: "owner-confirmed" as const, targetConfirmed: true };
+    const plan = createFreeFirstArtifactPlan(prompt, context);
+    expect(chooseStarterProfile(prompt, context)).toBe("security-protection-layer");
+    expect(plan.files.map((file) => file.path)).toEqual(expect.arrayContaining([
+      "scripts/Get-AuthorizedSecurityBaseline.ps1",
+      "scripts/Install-AuthorizedProtectionLayer.ps1",
+      "scripts/Verify-AuthorizedProtectionLayer.ps1",
+    ]));
+    expect(plan.commands.join("\n")).not.toMatch(/ollama|winget install/i);
+  });
+
   it("returns an executable Windows sign-in protection package without storing a password", () => {
     const prompt = "On my Windows laptop require a password after sleep wake and after shutdown boot. Implement it safely.";
     const context = { targetId: "windows-powershell" as const, projectType: "Security", permissionLevel: "owner-confirmed" as const, targetConfirmed: true };
