@@ -303,11 +303,19 @@ export default function SimplePromptStudio() {
   const copy = async (text: string) => { await navigator.clipboard?.writeText(text); };
   const analyzeOutput = () => {
     const current = terminalOutput.trim();
-    if (!current) { setTerminalAssessment(analyzeTerminalOutput("", activeProposal?.verification ?? [], activeProposal?.commands ?? [])); return; }
+    if (!current) {
+      setTerminalAssessment(analyzeTerminalOutput("", activeProposal?.verification ?? [], activeProposal?.commands ?? [], { originalRequirement: activeProposal?.prompt, workspaceName: workspace?.name }));
+      return;
+    }
     if (!activeProposal) return;
     const nextLog = appendTerminalOutput(activeProposal.terminalLog ?? terminalLog, current);
     const updatedProposal = { ...activeProposal, terminalLog: nextLog, taskState: activeProposal.taskState ? appendTerminalEvidence(activeProposal.taskState, current) : undefined };
-    const assessment = analyzeTerminalOutput(nextLog.join("\n\n--- NEXT TERMINAL OUTPUT ---\n\n"), updatedProposal.verification, updatedProposal.commands);
+    const assessment = analyzeTerminalOutput(
+      nextLog.join("\n\n--- NEXT TERMINAL OUTPUT ---\n\n"),
+      updatedProposal.verification,
+      updatedProposal.commands,
+      { originalRequirement: updatedProposal.prompt, workspaceName: workspace?.name },
+    );
     setTerminalLog(nextLog);
     setTerminalAssessment(assessment);
     setActiveProposal(updatedProposal);

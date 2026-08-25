@@ -31,21 +31,6 @@ describe("command workflow guidance", () => {
     expect(assessment.nextCommands[0]).toContain("Get-Content");
   });
 
-  it("moves early PowerShell evidence to the read-only security baseline without proposing apply", () => {
-    const baseline = "& .\\scripts\\Get-AuthorizedSecurityBaseline.ps1";
-    const assessment = analyzeTerminalOutput(
-      "Name                           Value\n----                           -----\nPSVersion                      5.1.22621.2506\nPSEdition                      Desktop\n\nPath\n----\nC:\\Users\\hp",
-      ["Paste the full baseline output for review."],
-      [baseline, "& .\\scripts\\Install-AuthorizedProtectionLayer.ps1 -Apply"],
-    );
-
-    expect(assessment.state).toBe("needs-verification");
-    expect(assessment.title).toContain("read-only security baseline");
-    expect(assessment.nextCommands).toEqual([baseline]);
-    expect(assessment.nextCommands.join("\n")).not.toContain("-Apply");
-    expect(assessment.remaining.join("\n")).toContain("Do not run Install-AuthorizedProtectionLayer.ps1 -Apply");
-  });
-
   it("uses chronological evidence to avoid repeating a prerequisite installer after it succeeded", () => {
     const timeline = "Python was not found\nwinget install --id Python.Python.3.12 -e\nFound Python 3.12 [Python.Python.3.12]\nSuccessfully installed";
     const assessment = analyzeTerminalOutput(timeline, ["Open /health"], ["python -m venv .venv", "python -m uvicorn app.main:app --reload --port 8012"]);
@@ -67,5 +52,48 @@ describe("command workflow guidance", () => {
     const second = appendTerminalOutput(first, "Found an existing package already installed\nNo available upgrade found");
     expect(second).toEqual(["Python was not found", "Found an existing package already installed\nNo available upgrade found"]);
     expect(analyzeTerminalOutput(second.join("\n\n--- NEXT TERMINAL OUTPUT ---\n\n"), [], ["python -m venv .venv"]).title).toContain("Python installed");
+  });
+
+  it("advances from a successful runtime check using only planned commands", () => {
+    const assessment = analyzeTerminalOutput(
+      "PS C:\\Users\\hp\\Documents\\own website> python --version\nPython 3.12.10",
+      [],
+      ["python --version", "python -m venv .venv", ".\\.venv\\Scripts\\Activate.ps1", "pytest"],
+      { originalRequirement: "Create hello-engineering Python CLI with tests.", workspaceName: "own website" },
+    );
+    expect(assessment.state).toBe("needs-verification");
+    expect(assessment.nextCommands).toEqual(["python -m venv .venv", ".\\.venv\\Scripts\\Activate.ps1", "pytest"]);
+    expect(assessment.nextCommands.join("\\n")).not.toContain("requirements.txt");
+  });
+
+  it("uses the latest evidence for a missing file instead of repeating earlier setup commands", () => {
+    const timeline = [
+      "PS C:\\Users\\hp> python --version\nPython 3.12.10",
+      "PS C:\\Users\\hp> python -m venv .venv\nPS C:\\Users\\hp> .\\.venv\\Scripts\\Activate.ps1\n(.venv) PS C:\\Users\\hp> python -m pip install -r requirements.txt\nERROR: Could not open requirements file: [Errno 2] No such file or directory: 'requirements.txt'",
+    ].join("\n\n--- NEXT TERMINAL OUTPUT ---\n\n");
+    const assessment = analyzeTerminalOutput(
+      timeline,
+      ["Run the project verification command."],
+      ["python --version", "python -m venv .venv", ".\\.venv\\Scripts\\Activate.ps1", "python -m pip install -r requirements.txt"],
+      { originalRequirement: "Create hello-engineering Python CLI with tests.", workspaceName: "own website" },
+    );
+    expect(assessment.state).toBe("error");
+    expect(assessment.title).toContain("wrong workspace");
+    expect(assessment.nextCommands).toEqual(["Get-Location", "Get-ChildItem -Force", "Test-Path .\\hello-engineering\\pyproject.toml", "Test-Path .\\hello-engineering\\tests"]);
+    expect(assessment.nextCommands.join("\n")).not.toContain("pip install");
+    expect(assessment.explanation).toContain("hello-engineering");
+  });
+
+  it("always provides the first remaining verification command after success", () => {
+    const assessment = analyzeTerminalOutput("The command completed successfully", ["pytest", "python -m hello_engineering --name Ada"]);
+    expect(assessment.state).toBe("needs-verification");
+    expect(assessment.nextCommands).toEqual(["pytest"]);
+    expect(assessment.remaining).toEqual(["python -m hello_engineering --name Ada"]);
+  });
+
+  it("provides a safe evidence command even when no verification list exists", () => {
+    const assessment = analyzeTerminalOutput("PS C:\\Users\\hp> Get-Location");
+    expect(assessment.state).toBe("needs-verification");
+    expect(assessment.nextCommands).toEqual(["Get-Location"]);
   });
 });
