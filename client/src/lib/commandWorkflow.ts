@@ -70,6 +70,15 @@ export function analyzeTerminalOutput(output: string, verification: string[], co
   if (/start-process\s*:.+(cannot find|cannot be run|access is denied)/i.test(value)) return { state: "error", title: "Windows application launch failed", explanation: "PowerShell could not start the requested native application. The direct action is not complete.", nextCommands: ["Get-Command notepad.exe,calc.exe,mspaint.exe,explorer.exe -ErrorAction SilentlyContinue | Select-Object Name,Source"], remaining: ["Confirm the requested Windows application exists before retrying the direct launch command."] };
   if (/is not recognized as an internal or external command/i.test(lower)) return { state: "error", title: "Required command is unavailable", explanation: "Windows could not find the requested runtime or installed project executable. The implementation has not started.", nextCommands: ["Get-Command python,node,corepack -ErrorAction SilentlyContinue"], remaining: ["Install or repair the missing runtime, then repeat the dependency-install step."] };
   if (/error:|exception|failed|cannot find|not recognized/i.test(lower)) return { state: "error", title: "Command reported an error", explanation: "The pasted output contains an error signal. Do not guess or repeat high-impact commands; copy the complete output with the command that produced it.", nextCommands: [], remaining: ["Review the error line and follow the package-specific troubleshooting guide if one exists."] };
+  const baselineCommand = commandContext.find((command) => /Get-AuthorizedSecurityBaseline\.ps1/i.test(command));
+  const hasInitialPowerShellEvidence = /^\s*PSVersion\s+/im.test(value) && /^\s*Path\s*$/im.test(value);
+  if (baselineCommand && hasInitialPowerShellEvidence) return {
+    state: "needs-verification",
+    title: "PowerShell is ready — run the read-only security baseline",
+    explanation: "The pasted output confirms PowerShell and the current working location, but it does not yet contain security-baseline evidence. Continue only from the same folder where SynapseX saved the generated files.",
+    nextCommands: [baselineCommand],
+    remaining: ["Confirm that .\\scripts\\Get-AuthorizedSecurityBaseline.ps1 exists in the current folder before running it.", "Do not run Install-AuthorizedProtectionLayer.ps1 -Apply. The next command is read-only and only collects baseline evidence.", ...verification],
+  };
   if (/server running on|uvicorn running|status["':\s]+ok|the command completed successfully|verifiedat|completed successfully/i.test(lower)) {
     return verification.length
       ? { state: "needs-verification", title: "Current command succeeded — verification remains", explanation: "The pasted output shows this command succeeded, but the task is not complete until the remaining verification evidence is collected.", nextCommands: [], remaining: verification }

@@ -31,6 +31,21 @@ describe("command workflow guidance", () => {
     expect(assessment.nextCommands[0]).toContain("Get-Content");
   });
 
+  it("moves early PowerShell evidence to the read-only security baseline without proposing apply", () => {
+    const baseline = "& .\\scripts\\Get-AuthorizedSecurityBaseline.ps1";
+    const assessment = analyzeTerminalOutput(
+      "Name                           Value\n----                           -----\nPSVersion                      5.1.22621.2506\nPSEdition                      Desktop\n\nPath\n----\nC:\\Users\\hp",
+      ["Paste the full baseline output for review."],
+      [baseline, "& .\\scripts\\Install-AuthorizedProtectionLayer.ps1 -Apply"],
+    );
+
+    expect(assessment.state).toBe("needs-verification");
+    expect(assessment.title).toContain("read-only security baseline");
+    expect(assessment.nextCommands).toEqual([baseline]);
+    expect(assessment.nextCommands.join("\n")).not.toContain("-Apply");
+    expect(assessment.remaining.join("\n")).toContain("Do not run Install-AuthorizedProtectionLayer.ps1 -Apply");
+  });
+
   it("uses chronological evidence to avoid repeating a prerequisite installer after it succeeded", () => {
     const timeline = "Python was not found\nwinget install --id Python.Python.3.12 -e\nFound Python 3.12 [Python.Python.3.12]\nSuccessfully installed";
     const assessment = analyzeTerminalOutput(timeline, ["Open /health"], ["python -m venv .venv", "python -m uvicorn app.main:app --reload --port 8012"]);
