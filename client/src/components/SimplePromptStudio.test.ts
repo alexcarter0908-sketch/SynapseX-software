@@ -13,9 +13,9 @@ describe("simple prompt platform inference", () => {
     expect(inferRuntime("Build a Next.js marketing website that describes products using FastAPI")).toBe("Next.js + TypeScript");
   });
 
-  it("routes every non-trivial request to the free local coding engine rather than a profile template", () => {
-    expect(inferGenerationMode("laptop sleep se wake hone par bhi password maange aur shutdown ke baad on karne par Windows sign-in password maange")).toBe("local");
-    expect(inferGenerationMode("Design a custom procurement optimization algorithm for my factory")).toBe("local");
+  it("defaults every request to the explicit no-model workflow instead of automatically requiring a local model", () => {
+    expect(inferGenerationMode("laptop sleep se wake hone par bhi password maange aur shutdown ke baad on karne par Windows sign-in password maange")).toBe("free");
+    expect(inferGenerationMode("Design a custom procurement optimization algorithm for my factory")).toBe("free");
   });
 
   it("requires an explicit Yes/No confirmation gate only for security-reducing requests", () => {

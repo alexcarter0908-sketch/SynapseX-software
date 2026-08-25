@@ -121,7 +121,7 @@ describe("engineering intelligence contracts", () => {
     getDbSpy.mockRestore();
   });
 
-  it("marks non-trivial work pending instead of fabricating a starter when the local model is unavailable", async () => {
+  it("prepares a deterministic no-model package without requiring Ollama", async () => {
     const originalLocalDemo = ENV.isLocalDemo;
     ENV.isLocalDemo = false;
     const inserted: Array<Record<string, unknown>> = [];
@@ -131,9 +131,9 @@ describe("engineering intelligence contracts", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Ollama unavailable")));
     try {
       const result = await caller.builder.generate({ prompt: "Create a desktop invoice helper", generationMode: "free", context: { targetId: "windows-powershell", projectType: "Desktop automation", permissionLevel: "standard", targetConfirmed: true } });
-      expect(result.files).toEqual([]);
-      expect(result.generation).toMatchObject({ provider: "model-unavailable", ready: false });
-      expect(result.taskState.status).toBe("pending-external");
+      expect(result.files.length).toBeGreaterThan(0);
+      expect(result.generation).toMatchObject({ provider: "direct-native", ready: true });
+      expect(result.taskState.status).toBe("awaiting-local-execution");
       expect(result.taskState.originalRequirement).toContain("desktop invoice helper");
       expect(inserted[0]).toMatchObject({ userId: 42, status: "Proposed" });
     } finally {

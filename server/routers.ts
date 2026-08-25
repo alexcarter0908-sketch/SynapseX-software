@@ -677,13 +677,13 @@ export const appRouter = router({
         const tier = getExecutionTier(input.prompt, context);
         let proposal: BuildProposal;
         let generation: NonNullable<BuildProposal["generation"]>;
-        if (tier === "direct-native") {
+        if (input.generationMode === "free" || tier === "direct-native") {
           const direct = createFreeFirstArtifactPlan(input.prompt, context);
           proposal = {
             ...direct,
             diffs: [],
-            operations: ["Perform the requested reviewed native action", "Return only visual or terminal evidence from this exact action"],
-            fileActions: [],
+            operations: ["Prepare the reviewed deterministic implementation package", "Run only the listed local verification commands and return their terminal output"],
+            fileActions: direct.files.map((file) => ({ action: "Create" as const, path: file.path, reason: file.purpose })),
           };
           generation = { provider: "direct-native", ready: true };
         } else {
@@ -707,7 +707,7 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
         const result = await db.insert(buildProposals).values({ userId: ctx.user.id, projectId: input.projectId, prompt: input.prompt, analysis: proposal.analysis, plan: JSON.stringify(proposal.plan), files: JSON.stringify(proposal.files), diffs: JSON.stringify(proposal.diffs), operations: JSON.stringify(proposal.operations), fileActions: JSON.stringify(proposal.fileActions), verification: JSON.stringify(proposal.verification), commands: JSON.stringify(proposal.commands), risks: JSON.stringify(proposal.risks), status: "Proposed" });
-        await addActivity(ctx.user.id, generation.provider === "local-ollama" ? "Generated a model-backed engineering proposal with local Ollama" : generation.provider === "direct-native" ? "Prepared a reviewed direct native action" : "Marked engineering work pending because the local model is unavailable", "builder", input.projectId);
+        await addActivity(ctx.user.id, generation.provider === "local-ollama" ? "Generated a model-backed engineering proposal with local Ollama" : generation.provider === "direct-native" ? "Prepared a deterministic no-model engineering package" : "Marked engineering work pending because the selected local model is unavailable", "builder", input.projectId);
         return { id: Number(result[0].insertId), status: "Proposed", ...proposal };
       }
       const promptForModel = `${contract}\n\n${input.prompt.length <= 18000 ? input.prompt : `${input.prompt.slice(0, 12000)}\n\n[Middle of brief compacted for model context]\n\n${input.prompt.slice(-5000)}`}`;

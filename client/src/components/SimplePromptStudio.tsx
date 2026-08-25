@@ -81,7 +81,7 @@ export function inferRuntime(prompt: string) {
 
 export function inferGenerationMode(prompt: string): GenerationMode {
   void prompt;
-  return "local";
+  return "free";
 }
 
 export function requiresHighImpactConfirmation(prompt: string) {
@@ -142,8 +142,9 @@ export default function SimplePromptStudio() {
   const [workspaceLabel, setWorkspaceLabel] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");
   const [localWorkspaces, setLocalWorkspaces] = useState<LocalWorkspaceAuthorization[]>(loadLocalWorkspaces);
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("free");
   const responseRef = useRef<HTMLElement>(null);
-  const localModelStatus = trpc.builder.localModelStatus.useQuery(undefined, { refetchInterval: 15_000 });
+  const localModelStatus = trpc.builder.localModelStatus.useQuery(undefined, { enabled: generationMode === "local", refetchInterval: 15_000 });
   const authorizedWorkspaces = trpc.development.workspaces.useQuery(undefined, { enabled: !localDemo });
   const authorizeWorkspace = trpc.development.authorizeWorkspace.useMutation({
     onSuccess: (workspaceAuthorization) => {
@@ -198,7 +199,6 @@ export default function SimplePromptStudio() {
   };
 
   const targetId = useMemo(() => inferTarget(prompt), [prompt]);
-  const generationMode = useMemo(() => inferGenerationMode(prompt), [prompt]);
   const build = trpc.builder.generate.useMutation({
     onSuccess: (result) => {
       const proposal: SavedProposal = {
@@ -427,7 +427,7 @@ export default function SimplePromptStudio() {
       <section className="mt-4 min-w-0 rounded-xl border border-cyan-400/20 bg-slate-900/70 p-4">
         <label htmlFor="synapsex-prompt" className="text-sm font-medium text-cyan-100">Aap kya banana ya solve karna chahte hain?</label>
         <Textarea id="synapsex-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.ctrlKey && event.key === "Enter") generate(); }} placeholder="Misal: Mere liye Windows PowerShell mein ek project-backup automation banao. Ya: React mein client portal website banao. Ya: Meri authorized company ke endpoint security baseline ka read-only assessment package banao." className={`mt-3 w-full min-w-0 max-w-full resize-y border-slate-700 bg-[#0b1214] p-4 text-base leading-7 text-white placeholder:text-slate-500 ${activeProposal ? "min-h-[112px]" : "min-h-[220px]"}`} />
-        <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0 text-xs text-slate-400"><p>Platform prompt se automatically samjha jayega. `Ctrl + Enter` ya button se response generate karein.</p><p className={`mt-1 ${localModelStatus.data?.ready ? "text-emerald-200" : "text-amber-100"}`}>{localModelStatus.isLoading ? "Free local coding engine check ho raha hai..." : localModelStatus.data?.ready ? `Free local coding engine ready: ${localModelStatus.data.model}` : `Free local coding engine pending: ${localModelStatus.data?.reason ?? "status unavailable"}`}</p></div><Button type="button" onClick={generate} disabled={build.isPending} className="w-full shrink-0 bg-cyan-400 px-5 text-slate-950 hover:bg-cyan-300 sm:w-auto">{build.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} {build.isPending ? "Generating..." : "Generate code / commands"}</Button></div>
+        <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0 text-xs text-slate-400"><p>Platform prompt se automatically samjha jayega. `Ctrl + Enter` ya button se response generate karein.</p><label className="mt-2 block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500" htmlFor="generation-mode">Generation mode</label><select id="generation-mode" value={generationMode} onChange={(event) => setGenerationMode(event.target.value as GenerationMode)} className="mt-1 h-9 w-full max-w-sm rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 sm:w-auto"><option value="free">No-model — deterministic plans and PowerShell handoff</option><option value="local">Local model / Ollama — only when you choose it</option><option value="model">Hosted model — configured provider required</option></select><p className={`mt-2 ${generationMode === "free" ? "text-emerald-200" : localModelStatus.data?.ready ? "text-emerald-200" : "text-amber-100"}`}>{generationMode === "free" ? "No-model mode active: Ollama install ya model download required nahi. Aap supported project, script, test aur security-baseline tasks generate kar sakte hain." : generationMode === "local" ? (localModelStatus.isLoading ? "Local model status check ho raha hai..." : localModelStatus.data?.ready ? `Local model ready: ${localModelStatus.data.model}` : `Local model optional hai aur abhi ready nahi: ${localModelStatus.data?.reason ?? "status unavailable"}`) : "Hosted-model mode selected: provider configuration ke baad advanced custom generation available hogi."}</p></div><Button type="button" onClick={generate} disabled={build.isPending} className="w-full shrink-0 bg-cyan-400 px-5 text-slate-950 hover:bg-cyan-300 sm:w-auto">{build.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} {build.isPending ? "Generating..." : "Generate code / commands"}</Button></div>
         <div className="mt-3 border-t border-slate-800 pt-3"><Button type="button" size="sm" variant="outline" onClick={inspectExistingProject} className="border-slate-700 text-slate-200"><SearchCheck className="mr-1.5 size-3.5" /> {projectContext ? "Change inspected project" : "Inspect existing project (optional)"}</Button><p className="mt-2 text-xs leading-5 text-slate-500">Existing code mein bug fix/change ke liye pehle project root select karein. SynapseX readable source/config files dekhega; `node_modules`, `.git`, build folders aur large files ignore honge.</p>{projectContextStatus && <p className="mt-2 text-xs text-cyan-100">Project context attached: {projectContextStatus}</p>}</div>
         <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
