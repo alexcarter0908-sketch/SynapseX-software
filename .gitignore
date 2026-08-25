@@ -16,3 +16,6 @@ workspace/
 build/
 dist/
 *.egg-info/
+node_modules/
+.vite/
+coverage/

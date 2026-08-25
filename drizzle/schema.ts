@@ -188,6 +188,41 @@ export const assistantMessages = mysqlTable("assistantMessages", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// Authorized workspace controls keep automated changes scoped to projects the owner explicitly approved.
+export const workspaceAuthorizations = mysqlTable("workspaceAuthorizations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  label: varchar("label", { length: 160 }).notNull(),
+  rootPath: varchar("rootPath", { length: 500 }).notNull(),
+  scopes: text("scopes").notNull(),
+  status: mysqlEnum("status", ["Active", "Revoked"]).default("Active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// Sessions preserve the original brief, structured task state, and final verification outcome.
+export const developmentSessions = mysqlTable("developmentSessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  projectId: int("projectId"),
+  workspaceAuthorizationId: int("workspaceAuthorizationId"),
+  originalRequirement: text("originalRequirement").notNull(),
+  taskState: text("taskState").notNull(),
+  status: mysqlEnum("status", ["Planned", "Awaiting Local Execution", "Repairing", "Pending External", "Verified", "Blocked"]).default("Planned").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// Immutable append-only events make terminal evidence, repairs, and verification decisions auditable.
+export const developmentSessionEvents = mysqlTable("developmentSessionEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  userId: int("userId").notNull(),
+  kind: mysqlEnum("kind", ["Requirement", "Plan", "Command", "Terminal Output", "Repair", "Verification", "Safety", "Status"]).notNull(),
+  payload: text("payload").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Project = typeof projects.$inferSelect;
@@ -203,3 +238,6 @@ export type Activity = typeof activity.$inferSelect;
 export type BuildProposal = typeof buildProposals.$inferSelect;
 export type Runner = typeof runners.$inferSelect;
 export type ExecutionRequest = typeof executionRequests.$inferSelect;
+export type WorkspaceAuthorization = typeof workspaceAuthorizations.$inferSelect;
+export type DevelopmentSession = typeof developmentSessions.$inferSelect;
+export type DevelopmentSessionEvent = typeof developmentSessionEvents.$inferSelect;

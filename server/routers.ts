@@ -18,12 +18,15 @@ import {
   audits,
   changeHistory,
   codeChanges,
+  developmentSessionEvents,
+  developmentSessions,
   executionRequests,
   runners,
   getAssistantMessagesForUser,
   getAuditsForUser,
   getChangesForUser,
   getDashboardData,
+  getDevelopmentSessionsForUser,
   getDb,
   getProjectForUser,
   getProjectsForUser,
@@ -32,12 +35,14 @@ import {
   getScriptsForUser,
   getTasksForUser,
   getTestRunsForUser,
+  getWorkspaceAuthorizationsForUser,
   projects,
   reports,
   scriptRuns,
   scripts,
   tasks,
   testRuns,
+  workspaceAuthorizations,
 } from "./db";
 
 const projectInput = z.object({
@@ -331,6 +336,19 @@ function normalizeBuildProposal(value: Record<string, unknown>): BuildProposal {
   return value as unknown as BuildProposal;
 }
 
+const developmentSessionStatus = z.enum(["Planned", "Awaiting Local Execution", "Repairing", "Pending External", "Verified", "Blocked"]);
+const workspaceScope = z.enum(["create", "modify", "test", "report"]);
+const blockedAutonomyPattern = /\b(?:rm\s+-rf\s+\/|format-volume|remove-item\s+.*-recurse|del\s+\/s|drop\s+(?:database|table)|truncate\s+table|git\s+push\s+--force|curl\s+.*\|\s*(?:sh|bash)|iwr\s+.*\|\s*iex)\b/i;
+
+function classifyTerminalEvidence(output: string) {
+  const normalized = output.toLowerCase();
+  if (!output.trim()) return { status: "Awaiting Local Execution" as const, outcome: "needs-verification", summary: "No terminal output was supplied. Run the proposed commands and paste the complete result." };
+  if (/(access is denied|permission denied|requires elevation|administrator)/i.test(output)) return { status: "Blocked" as const, outcome: "needs-permission", summary: "The local command needs additional authorization or elevated access. No bypass was attempted." };
+  if (/(error\s*(?:\[|:)|failed|exception|traceback|cannot find|not recognized|enoent|exit code\s*[1-9])/i.test(output)) return { status: "Repairing" as const, outcome: "failed", summary: "The terminal output contains a failure signal. A repair step is needed before verification." };
+  if (/(tests?\s+passed|build succeeded|compiled successfully|exit code\s*0|successfully|0 failing)/i.test(normalized)) return { status: "Verified" as const, outcome: "success", summary: "The supplied output contains a success signal. Verify the requested behavior before declaring the work complete." };
+  return { status: "Pending External" as const, outcome: "partial-success", summary: "The command produced output but it does not yet prove completion. Continue with the remaining verification steps." };
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -343,6 +361,86 @@ export const appRouter = router({
   }),
   dashboard: router({
     summary: protectedProcedure.query(({ ctx }) => getDashboardData(ctx.user.id)),
+  }),
+  development: router({
+    workspaces: protectedProcedure.query(({ ctx }) => getWorkspaceAuthorizationsForUser(ctx.user.id)),
+    authorizeWorkspace: protectedProcedure.input(z.object({
+      label: z.string().min(2).max(160),
+      rootPath: z.string().min(3).max(500),
+      scopes: z.array(workspaceScope).min(1).max(4),
+    })).mutation(async ({ ctx, input }) => {
+      if (blockedAutonomyPattern.test(input.rootPath)) throw new TRPCError({ code: "BAD_REQUEST", message: "The workspace path contains a blocked command pattern." });
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
+      const created = await db.insert(workspaceAuthorizations).values({ userId: ctx.user.id, label: input.label, rootPath: input.rootPath, scopes: JSON.stringify(input.scopes), status: "Active" });
+      const id = Number(created[0].insertId);
+      await addActivity(ctx.user.id, `Authorized workspace: ${input.label}`, "inspection");
+      return { id, status: "Active" as const };
+    }),
+    revokeWorkspace: protectedProcedure.input(z.object({ workspaceAuthorizationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
+      const row = (await db.select().from(workspaceAuthorizations).where(and(eq(workspaceAuthorizations.id, input.workspaceAuthorizationId), eq(workspaceAuthorizations.userId, ctx.user.id))).limit(1))[0];
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Workspace authorization not found." });
+      await db.update(workspaceAuthorizations).set({ status: "Revoked" }).where(eq(workspaceAuthorizations.id, row.id));
+      await addActivity(ctx.user.id, `Revoked workspace: ${row.label}`, "inspection");
+      return { success: true };
+    }),
+    listSessions: protectedProcedure.input(z.object({ projectId: z.number().int().positive().optional() }).optional()).query(({ ctx, input }) => getDevelopmentSessionsForUser(ctx.user.id, input?.projectId)),
+    createSession: protectedProcedure.input(z.object({
+      originalRequirement: z.string().min(8).max(20000),
+      taskState: z.string().min(2).max(150000),
+      projectId: z.number().int().positive().optional(),
+      workspaceAuthorizationId: z.number().int().positive().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
+      if (input.workspaceAuthorizationId) {
+        const workspace = (await db.select().from(workspaceAuthorizations).where(and(eq(workspaceAuthorizations.id, input.workspaceAuthorizationId), eq(workspaceAuthorizations.userId, ctx.user.id))).limit(1))[0];
+        if (!workspace || workspace.status !== "Active") throw new TRPCError({ code: "FORBIDDEN", message: "Select an active authorized workspace before creating an autonomous session." });
+      }
+      const created = await db.insert(developmentSessions).values({ userId: ctx.user.id, projectId: input.projectId, workspaceAuthorizationId: input.workspaceAuthorizationId, originalRequirement: input.originalRequirement, taskState: input.taskState, status: "Planned" });
+      const sessionId = Number(created[0].insertId);
+      await db.insert(developmentSessionEvents).values([
+        { sessionId, userId: ctx.user.id, kind: "Requirement", payload: input.originalRequirement },
+        { sessionId, userId: ctx.user.id, kind: "Plan", payload: input.taskState },
+        { sessionId, userId: ctx.user.id, kind: "Status", payload: "Session created. Awaiting a generated command handoff or authorized local execution." },
+      ]);
+      return { id: sessionId, status: "Planned" as const };
+    }),
+    sessionEvents: protectedProcedure.input(z.object({ sessionId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
+      const session = (await db.select().from(developmentSessions).where(and(eq(developmentSessions.id, input.sessionId), eq(developmentSessions.userId, ctx.user.id))).limit(1))[0];
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Development session not found." });
+      const events = await db.select().from(developmentSessionEvents).where(and(eq(developmentSessionEvents.sessionId, session.id), eq(developmentSessionEvents.userId, ctx.user.id))).orderBy(desc(developmentSessionEvents.createdAt));
+      return { session, events };
+    }),
+    ingestTerminalOutput: protectedProcedure.input(z.object({ sessionId: z.number().int().positive(), output: z.string().min(1).max(120000) })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
+      const session = (await db.select().from(developmentSessions).where(and(eq(developmentSessions.id, input.sessionId), eq(developmentSessions.userId, ctx.user.id))).limit(1))[0];
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Development session not found." });
+      const classification = classifyTerminalEvidence(input.output);
+      await db.insert(developmentSessionEvents).values([
+        { sessionId: session.id, userId: ctx.user.id, kind: "Terminal Output", payload: input.output },
+        { sessionId: session.id, userId: ctx.user.id, kind: classification.status === "Repairing" ? "Repair" : "Verification", payload: classification.summary },
+        { sessionId: session.id, userId: ctx.user.id, kind: "Status", payload: classification.status },
+      ]);
+      await db.update(developmentSessions).set({ status: classification.status }).where(eq(developmentSessions.id, session.id));
+      return classification;
+    }),
+    recordHandoff: protectedProcedure.input(z.object({ sessionId: z.number().int().positive(), command: z.string().min(2).max(8000), purpose: z.string().min(2).max(1200), expectedResult: z.string().min(2).max(1200) })).mutation(async ({ ctx, input }) => {
+      if (blockedAutonomyPattern.test(input.command)) throw new TRPCError({ code: "FORBIDDEN", message: "This command is blocked from autonomous handoff. Review it manually in a controlled terminal." });
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database is unavailable." });
+      const session = (await db.select().from(developmentSessions).where(and(eq(developmentSessions.id, input.sessionId), eq(developmentSessions.userId, ctx.user.id))).limit(1))[0];
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Development session not found." });
+      const payload = JSON.stringify({ command: input.command, purpose: input.purpose, expectedResult: input.expectedResult });
+      await db.insert(developmentSessionEvents).values({ sessionId: session.id, userId: ctx.user.id, kind: "Command", payload });
+      await db.update(developmentSessions).set({ status: "Awaiting Local Execution" }).where(eq(developmentSessions.id, session.id));
+      return { success: true, status: "Awaiting Local Execution" as const };
+    }),
   }),
   projects: router({
     list: protectedProcedure.query(({ ctx }) => getProjectsForUser(ctx.user.id)),

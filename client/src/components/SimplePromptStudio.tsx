@@ -120,8 +120,39 @@ export default function SimplePromptStudio() {
   const [workspaceStatus, setWorkspaceStatus] = useState("");
   const [projectContext, setProjectContext] = useState<BrowserProjectContext>();
   const [projectContextStatus, setProjectContextStatus] = useState("");
+  const [developmentSessionId, setDevelopmentSessionId] = useState<number>();
+  const [developmentSessionStatus, setDevelopmentSessionStatus] = useState("No persistent session yet");
+  const [authorizedWorkspaceId, setAuthorizedWorkspaceId] = useState<number>();
+  const [workspaceLabel, setWorkspaceLabel] = useState("");
+  const [workspacePath, setWorkspacePath] = useState("");
   const responseRef = useRef<HTMLElement>(null);
   const localModelStatus = trpc.builder.localModelStatus.useQuery(undefined, { refetchInterval: 15_000 });
+  const authorizedWorkspaces = trpc.development.workspaces.useQuery();
+  const authorizeWorkspace = trpc.development.authorizeWorkspace.useMutation({
+    onSuccess: (workspaceAuthorization) => {
+      setAuthorizedWorkspaceId(workspaceAuthorization.id);
+      setWorkspaceLabel("");
+      setWorkspacePath("");
+      setDevelopmentSessionStatus("Authorized workspace saved. New session activity remains inside its declared scope.");
+      void authorizedWorkspaces.refetch();
+    },
+    onError: (workspaceError) => setError(workspaceError.message),
+  });
+  const persistDevelopmentSession = trpc.development.createSession.useMutation({
+    onSuccess: (session) => {
+      setDevelopmentSessionId(session.id);
+      setDevelopmentSessionStatus(`${session.status} · original requirement and task state saved`);
+    },
+    onError: (sessionError) => setDevelopmentSessionStatus(`Local session only · ${sessionError.message}`),
+  });
+  const ingestPersistentOutput = trpc.development.ingestTerminalOutput.useMutation({
+    onSuccess: (result) => setDevelopmentSessionStatus(`${result.status} · ${result.summary}`),
+    onError: (sessionError) => setDevelopmentSessionStatus(`Output retained locally · ${sessionError.message}`),
+  });
+  const recordCommandHandoff = trpc.development.recordHandoff.useMutation({
+    onSuccess: (result) => setDevelopmentSessionStatus(`${result.status} · PowerShell handoff logged`),
+    onError: (sessionError) => setDevelopmentSessionStatus(`Command copied · ${sessionError.message}`),
+  });
 
   useEffect(() => {
     try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 20))); } catch { /* Local history is optional. */ }
@@ -155,6 +186,13 @@ export default function SimplePromptStudio() {
       setWorkspace(undefined);
       setWorkspaceSaved(false);
       setWorkspaceStatus("");
+      setDevelopmentSessionId(undefined);
+      setDevelopmentSessionStatus("Saving durable engineering session...");
+      persistDevelopmentSession.mutate({
+        originalRequirement: prompt.trim(),
+        taskState: JSON.stringify(result.taskState ?? { originalRequirement: prompt.trim(), generatedAt: Date.now(), state: result.status }),
+        workspaceAuthorizationId: authorizedWorkspaceId,
+      });
       window.setTimeout(() => responseRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     },
     onError: (mutationError) => setError(mutationError.message || "Response generate nahi ho saki. Prompt dobara try karein."),
@@ -222,6 +260,7 @@ export default function SimplePromptStudio() {
     setTerminalAssessment(assessment);
     setActiveProposal(updatedProposal);
     setHistory((currentHistory) => [updatedProposal, ...currentHistory.filter((item) => item.createdAt !== updatedProposal.createdAt)].slice(0, 20));
+    if (developmentSessionId) ingestPersistentOutput.mutate({ sessionId: developmentSessionId, output: current });
     if (activeProposal.generation?.provider === "local-ollama") {
       diagnose.mutate({
         originalRequirement: activeProposal.prompt,
@@ -343,12 +382,14 @@ export default function SimplePromptStudio() {
         <Textarea id="synapsex-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.ctrlKey && event.key === "Enter") generate(); }} placeholder="Misal: Mere liye Windows PowerShell mein ek project-backup automation banao. Ya: React mein client portal website banao. Ya: Meri authorized company ke endpoint security baseline ka read-only assessment package banao." className={`mt-3 w-full min-w-0 max-w-full resize-y border-slate-700 bg-[#0b1214] p-4 text-base leading-7 text-white placeholder:text-slate-500 ${activeProposal ? "min-h-[112px]" : "min-h-[220px]"}`} />
         <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0 text-xs text-slate-400"><p>Platform prompt se automatically samjha jayega. `Ctrl + Enter` ya button se response generate karein.</p><p className={`mt-1 ${localModelStatus.data?.ready ? "text-emerald-200" : "text-amber-100"}`}>{localModelStatus.isLoading ? "Free local coding engine check ho raha hai..." : localModelStatus.data?.ready ? `Free local coding engine ready: ${localModelStatus.data.model}` : `Free local coding engine pending: ${localModelStatus.data?.reason ?? "status unavailable"}`}</p></div><Button type="button" onClick={generate} disabled={build.isPending} className="w-full shrink-0 bg-cyan-400 px-5 text-slate-950 hover:bg-cyan-300 sm:w-auto">{build.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />} {build.isPending ? "Generating..." : "Generate code / commands"}</Button></div>
         <div className="mt-3 border-t border-slate-800 pt-3"><Button type="button" size="sm" variant="outline" onClick={inspectExistingProject} className="border-slate-700 text-slate-200"><SearchCheck className="mr-1.5 size-3.5" /> {projectContext ? "Change inspected project" : "Inspect existing project (optional)"}</Button><p className="mt-2 text-xs leading-5 text-slate-500">Existing code mein bug fix/change ke liye pehle project root select karein. SynapseX readable source/config files dekhega; `node_modules`, `.git`, build folders aur large files ignore honge.</p>{projectContextStatus && <p className="mt-2 text-xs text-cyan-100">Project context attached: {projectContextStatus}</p>}</div>
+        <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-semibold text-emerald-100">Authorized workspace boundary</p><p className="mt-1 text-xs leading-5 text-slate-400">Autonomous session sirf selected project path ke andar files create/modify/test/report kar sakta hai. External publish, secrets, destructive database actions aur dangerous commands scope mein nahi aate.</p></div><span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-200">{authorizedWorkspaces.data?.length ?? 0} saved</span></div><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1.5fr_auto]"><input value={workspaceLabel} onChange={(event) => setWorkspaceLabel(event.target.value)} placeholder="Project label" className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-xs text-slate-100 placeholder:text-slate-500" /><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} placeholder="C:\\Authorized\\Project" className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 font-mono text-xs text-slate-100 placeholder:text-slate-500" /><Button type="button" size="sm" disabled={!workspaceLabel.trim() || !workspacePath.trim() || authorizeWorkspace.isPending} onClick={() => authorizeWorkspace.mutate({ label: workspaceLabel.trim(), rootPath: workspacePath.trim(), scopes: ["create", "modify", "test", "report"] })} className="bg-emerald-300 text-slate-950 hover:bg-emerald-200">{authorizeWorkspace.isPending ? "Saving..." : "Authorize"}</Button></div><div className="mt-2"><label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500" htmlFor="authorized-workspace">Session workspace</label><select id="authorized-workspace" value={authorizedWorkspaceId ?? ""} onChange={(event) => setAuthorizedWorkspaceId(event.target.value ? Number(event.target.value) : undefined)} className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-xs text-slate-100"><option value="">No autonomous workspace selected — plan/handoff only</option>{authorizedWorkspaces.data?.filter((item) => item.status === "Active").map((item) => <option key={item.id} value={item.id}>{item.label} · {item.rootPath}</option>)}</select></div></div>
         {error && <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">{error}</p>}
       </section>
 
       <section ref={responseRef} className="mt-4 min-w-0 scroll-mt-4 rounded-xl border border-slate-700 bg-[#0b1214]">
         <div className="flex min-w-0 flex-col gap-3 border-b border-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="text-sm font-semibold text-cyan-100">Response</p><p className="text-xs text-slate-500">Code, files, commands, verification aur rollback yahan direct milega.</p></div>{activeProposal && <Button type="button" size="sm" variant="outline" onClick={() => download(activeProposal)} className="w-full shrink-0 border-slate-700 text-slate-200 sm:w-auto"><Download className="mr-1.5 size-3.5" /> Download ZIP</Button>}</div>
         <div className="p-4 pb-8">{!activeProposal ? <div className="flex min-h-48 flex-col items-center justify-center text-center"><Code2 className="size-10 text-cyan-400/40" /><p className="mt-4 text-sm text-slate-300">Apna complete prompt upar likhein. SynapseX requirement, project context, files, commands, evidence aur repair loop ko ek engineering task mein rakhega.</p><p className="mt-2 max-w-xl text-xs leading-5 text-slate-500">Har non-trivial engineering request free local coding engine ko jati hai. Agar engine ready nahi hai, SynapseX implementation fabricate nahi karega; sirf exact pending setup step aur original task state dikhayega.</p></div> : <div className="space-y-5"><div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Summary</p><p className="mt-2 text-sm leading-6 text-slate-200">{activeProposal.analysis}</p>{activeProposal.taskState && <p className="mt-2 text-xs text-cyan-100">Task status: <strong>{activeProposal.taskState.status}</strong> · terminal evidence: {activeProposal.taskState.terminalEvidence.length} · repairs: {activeProposal.taskState.repairs.length}</p>}</div>
+          <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200">Persistent development loop</p><p className="mt-2 text-xs leading-5 text-slate-300">{developmentSessionId ? `Session #${developmentSessionId}` : "Session pending"} · {developmentSessionStatus}</p><p className="mt-1 text-xs leading-5 text-slate-500">Original brief, generated plan, copied command handoffs, pasted terminal output, repair status and verification outcome are kept together when persistent storage is available.</p></div>
           {activeProposal.plan?.length ? <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3"><p className="text-sm font-semibold text-cyan-100">Engineering workflow</p><ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-slate-200">{activeProposal.plan.map((step, index) => <li key={index}>{step}</li>)}</ol></div> : null}
           {activeProposal.files.length > 0 && <div className="rounded-lg border border-violet-400/25 bg-violet-400/5 p-3"><p className="text-sm font-semibold text-violet-100">Direct implementation workspace</p><p className="mt-1 text-xs leading-5 text-slate-300">ZIP ke baghair files directly ek dedicated folder mein save karein. Files save hone se pehle project commands disabled rahengi, taa-ke purane generated-package folder mein code run na ho.</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><Button type="button" size="sm" variant="outline" onClick={chooseWorkspace} className="border-violet-400/30 text-violet-100"><FolderOpen className="mr-1.5 size-3.5" /> {workspace ? "Change folder" : "Select folder"}</Button><Button type="button" size="sm" onClick={saveFilesToWorkspace} disabled={!workspace} className="bg-violet-300 text-slate-950 hover:bg-violet-200"><Save className="mr-1.5 size-3.5" /> Save visible files</Button></div>{workspaceStatus && <p className="mt-3 text-xs leading-5 text-violet-100">{workspaceStatus}</p>}</div>}
           {activeProposal.commands.length > 0 && <div>
@@ -357,7 +398,7 @@ export default function SimplePromptStudio() {
             <div className="mt-2 space-y-3">{activeProposal.commands.map((command, index) => {
               const guidance = describeCommand(command);
               const needsWorkspace = activeProposal.files.length > 0;
-              return <article key={`${command}-${index}`} className="rounded-lg border border-slate-800 bg-slate-900/50 p-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold text-cyan-200">Step {index + 1} · {guidance.purpose}</p><p className="mt-1 text-xs leading-5 text-slate-300">Expected: {guidance.expected}</p><p className="mt-1 text-xs leading-5 text-amber-100/90">Check: {guidance.safety}</p></div><Button type="button" size="sm" variant="outline" disabled={needsWorkspace && !workspaceSaved} onClick={() => copy(command)} className="shrink-0 border-slate-700 text-slate-200"><Copy className="mr-1.5 size-3.5" /> Copy command</Button></div><pre className="mt-3 overflow-x-auto rounded-md border border-slate-800 bg-black/40 p-3 font-mono text-xs leading-6 text-slate-200">{command}</pre></article>;
+              return <article key={`${command}-${index}`} className="rounded-lg border border-slate-800 bg-slate-900/50 p-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold text-cyan-200">Step {index + 1} · {guidance.purpose}</p><p className="mt-1 text-xs leading-5 text-slate-300">Expected: {guidance.expected}</p><p className="mt-1 text-xs leading-5 text-amber-100/90">Check: {guidance.safety}</p></div><Button type="button" size="sm" variant="outline" disabled={needsWorkspace && !workspaceSaved} onClick={() => { copy(command); if (developmentSessionId) recordCommandHandoff.mutate({ sessionId: developmentSessionId, command, purpose: guidance.purpose, expectedResult: guidance.expected }); }} className="shrink-0 border-slate-700 text-slate-200"><Copy className="mr-1.5 size-3.5" /> Copy command</Button></div><pre className="mt-3 overflow-x-auto rounded-md border border-slate-800 bg-black/40 p-3 font-mono text-xs leading-6 text-slate-200">{command}</pre></article>;
             })}</div>
           </div>}
           {activeProposal.files.length > 0 && <div><p className="text-sm font-semibold text-slate-100">Complete files</p><div className="mt-2 space-y-2">{activeProposal.files.map((file, index) => <details key={`${file.path}-${index}`} className="rounded-lg border border-slate-800 bg-slate-900/50" open={index === 0}><summary className="flex cursor-pointer items-center justify-between gap-4 px-3 py-3"><span><span className="font-mono text-xs text-cyan-200">{file.path}</span><span className="ml-2 text-xs text-slate-500">{file.purpose}</span></span><Button type="button" size="sm" variant="ghost" onClick={(event) => { event.preventDefault(); copy(file.content ?? ""); }} className="h-7 text-slate-300"><Copy className="mr-1 size-3" /> Copy</Button></summary><pre className="max-h-80 overflow-auto border-t border-slate-800 p-3 font-mono text-xs leading-5 text-slate-200">{file.content}</pre></details>)}</div></div>}

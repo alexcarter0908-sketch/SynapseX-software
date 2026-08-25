@@ -16,9 +16,10 @@ from .runner import discover_test_commands, execute_test_commands
 from .security import audit_project
 from .safety import SafetyBoundaryError, resolve_internal_file, resolve_internal_target
 from .workflow import run_baseline
+from .autonomy import run_authorized_autonomy
 
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("rollback", "Preview or restore a timestamped internal workspace backup."),
         ("baseline", "Run the safe inspect-audit-test-report workflow inside the workspace."),
         ("dbcheck", "Inspect internal migration files for destructive database operations."),
+        ("autonomous", "Run one bounded plan-validate-apply-test loop inside the authorized internal workspace."),
         ("init", "Create the project-level .uea artifact directory."),
     ]:
         command = subparsers.add_parser(name, help=help_text)
@@ -52,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
         if name in {"plan", "task"}:
             command.add_argument("--request", required=True, help="High-level engineering request to plan.")
             command.add_argument("--model", default=None, help="Optional configured model identifier.")
+        if name == "autonomous":
+            command.add_argument("--request", required=True, help="Engineering request to implement inside the authorized workspace.")
+            command.add_argument("--model", default=None, help="Optional configured model identifier.")
+            command.add_argument("--approve", action="store_true", help="Apply validated internal changes, create a backup, and run discovered tests.")
+            command.add_argument("--timeout", type=int, default=300, help="Per discovered test-command timeout in seconds.")
         if name == "task":
             command.add_argument("--approve", action="store_true", help="Apply the generated proposal after validation and create a backup.")
         if name == "change":
@@ -118,6 +125,9 @@ def _dispatch(args: argparse.Namespace, root: Path) -> dict[str, Any]:
     if command == "baseline":
         result = run_baseline(root, run_tests=not args.skip_tests, write_artifacts=not args.no_write)
         return {"ok": all(item["status"] in {"passed", "not_available"} for item in result["results"]), **result}
+
+    if command == "autonomous":
+        return run_authorized_autonomy(root, args.request, args.model, apply=args.approve, timeout_seconds=args.timeout)
 
     if command == "change":
         spec_path = resolve_internal_file(root, args.spec)
@@ -262,6 +272,15 @@ def _print_human(command: str, payload: dict[str, Any]) -> None:
         print(f"Test commands executed: {len(payload['results'])}")
         if payload.get("report_path"):
             print(f"Report: {payload['report_path']}")
+    elif command == "autonomous":
+        print(f"Authorized autonomy status: {payload['status']}")
+        print(f"Validated: {payload['validated']} · Applied: {payload['applied']}")
+        if payload.get("backup_directory"):
+            print(f"Rollback backup: {payload['backup_directory']}")
+        for path in payload.get("changed_files", []):
+            print(f"  changed: {path}")
+        for result in payload.get("tests", []):
+            print(f"[{result['status'].upper()}] {' '.join(result['command'])}")
     elif command == "change":
         if payload.get("applied"):
             print(f"Applied safely. Backup: {payload['backup_directory']}")

@@ -13,11 +13,14 @@ import {
   reports,
   runners,
   executionRequests,
+  developmentSessionEvents,
+  developmentSessions,
   scriptRuns,
   scripts,
   tasks,
   testRuns,
   users,
+  workspaceAuthorizations,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -157,4 +160,17 @@ export async function getReportsForUser(userId: number, projectId?: number) {
   return db.select().from(reports).where(projectId ? and(eq(reports.userId, userId), eq(reports.projectId, projectId)) : eq(reports.userId, userId)).orderBy(desc(reports.createdAt));
 }
 
-export { activity, assistantMessages, auditFindings, audits, buildProposals, changeHistory, codeChanges, executionRequests, projects, reports, runners, scriptRuns, scripts, tasks, testRuns };
+export async function getDevelopmentSessionsForUser(userId: number, projectId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const condition = projectId ? and(eq(developmentSessions.userId, userId), eq(developmentSessions.projectId, projectId)) : eq(developmentSessions.userId, userId);
+  return db.select().from(developmentSessions).where(condition).orderBy(desc(developmentSessions.updatedAt));
+}
+
+export async function getWorkspaceAuthorizationsForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(workspaceAuthorizations).where(eq(workspaceAuthorizations.userId, userId)).orderBy(desc(workspaceAuthorizations.updatedAt));
+}
+
+export { activity, assistantMessages, auditFindings, audits, buildProposals, changeHistory, codeChanges, developmentSessionEvents, developmentSessions, executionRequests, projects, reports, runners, scriptRuns, scripts, tasks, testRuns, workspaceAuthorizations };
