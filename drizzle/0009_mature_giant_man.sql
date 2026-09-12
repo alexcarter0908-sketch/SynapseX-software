@@ -1,0 +1,1 @@
+ALTER TABLE `buildProposals` ADD `updatedAt` timestamp DEFAULT (now()) NOT NULL ON UPDATE CURRENT_TIMESTAMP;

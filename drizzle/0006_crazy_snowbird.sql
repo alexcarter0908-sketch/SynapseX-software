@@ -1,0 +1,1 @@
+ALTER TABLE `buildProposals` ADD `diffs` text NOT NULL;
